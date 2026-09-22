@@ -16,5 +16,8 @@ dev = [
     "pytest>=9,<10"
 ]
 
+[project.scripts]
+infra-morph = "app.cli.main:main"
+
 [tool.setuptools.packages.find]
 where = ["."]

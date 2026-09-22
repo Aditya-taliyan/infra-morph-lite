@@ -7,7 +7,14 @@ name = "infra-morph-backend"
 version = "0.1.0"
 description = "Backend service for Infra Morph Lite"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "pydantic-settings>=2.15,<3"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9,<10"
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

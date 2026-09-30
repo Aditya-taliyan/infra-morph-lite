@@ -14,7 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9,<10"
+    "pytest>=9,<10",
+    "pytest-cov>=7,<8"
 ]
 
 [project.scripts]
@@ -22,3 +23,18 @@ infra-morph = "app.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.coverage.run]
+source = [
+    "app.cli",
+    "app.core",
+    "app.generators",
+    "app.models",
+    "app.services",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

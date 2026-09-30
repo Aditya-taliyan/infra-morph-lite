@@ -34,3 +34,4 @@ crash.*.log
 dist/
 build/
 *.egg-info/
+.coverage

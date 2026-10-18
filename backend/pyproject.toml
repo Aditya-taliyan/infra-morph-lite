@@ -28,6 +28,7 @@ where = ["."]
 source = [
     "app.cli",
     "app.core",
+    "app.domain",
     "app.generators",
     "app.models",
     "app.services",

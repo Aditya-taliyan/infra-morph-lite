@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.infrastructure import InfrastructureSpec
+from app.domain.infrastructure import InfrastructureSpec
 
 
 def test_infrastructure_spec_accepts_name():

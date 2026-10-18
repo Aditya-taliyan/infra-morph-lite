@@ -1,5 +1,5 @@
 from app.generators.terraform.basic import BasicTerraformGenerator
-from app.models.infrastructure import InfrastructureSpec
+from app.domain.infrastructure import InfrastructureSpec
 
 
 def test_basic_terraform_generator():

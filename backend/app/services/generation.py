@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.generators.terraform.basic import BasicTerraformGenerator
-from app.models.infrastructure import InfrastructureSpec
+from app.domain.infrastructure import InfrastructureSpec
 from app.services.output import TerraformOutputService
 
 

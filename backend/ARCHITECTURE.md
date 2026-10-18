@@ -60,16 +60,19 @@ Responsibilities:
 
 The core package should remain small and should not become a general-purpose dumping ground.
 
-### app/models
+### app/domain
 
-Contains domain models representing infrastructure concepts.
+Contains the domain model (the IR) representing infrastructure concepts.
 
 Responsibilities:
 - Define infrastructure specifications.
 - Represent cloud-independent infrastructure concepts.
-- Define structured data exchanged between application layers.
 
-Models must not depend on a specific cloud provider or Terraform implementation.
+The domain must not depend on a specific cloud provider, Terraform, FastAPI, Streamlit, subprocess, httpx or Jinja2.
+
+### app/models
+
+Contains API request/response schemas only. See "Layer decisions" below.
 
 ### app/services
 
@@ -181,3 +184,13 @@ Models  Generators
       Terraform
 
 This dependency direction should be preserved as the project grows.
+
+## 4. Layer decisions
+
+- `app/domain/` holds the IR and core types (Pydantic). It is the single source of truth for what infrastructure can be described. It imports nothing from other app layers.
+- `app/models/` holds API request/response schemas only (the shapes FastAPI receives and returns). These are transport types: they may wrap or reference domain types, but the domain never imports from `models/`. Keeping them separate means the HTTP contract can change without touching the IR, and vice versa.
+- `app/providers/` holds the `ProviderAdapter` interface and the AWS/Azure mappings. It is the only place (besides templates) where `aws_*`/`azurerm_*` names appear.
+- `app/infrastructure/` holds external I/O: the terraform runner, the infracost runner and the Ollama client.
+- `app/interpreters/` turns natural language into IR (LLM and rule-based fallback).
+- `app/generators/templates/` holds the Jinja2 Terraform templates. Generated runs are written to `backend/generated/<run_id>/` (gitignored).
+- Tests are split into `tests/unit/`, `tests/integration/` (API → service → generator → validator) and `tests/fixtures/` (sample IRs, golden files).

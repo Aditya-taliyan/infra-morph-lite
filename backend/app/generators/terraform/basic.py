@@ -1,5 +1,5 @@
 from app.generators.base import InfrastructureGenerator
-from app.models.infrastructure import InfrastructureSpec
+from app.domain.infrastructure import InfrastructureSpec
 
 
 class BasicTerraformGenerator(InfrastructureGenerator):

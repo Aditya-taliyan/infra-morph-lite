@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.models.infrastructure import InfrastructureSpec
+from app.domain.infrastructure import InfrastructureSpec
 
 
 class InfrastructureGenerator(ABC):

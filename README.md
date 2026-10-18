@@ -1,9 +1,5 @@
-# Mini Project 3
+# InfraMorph AI
 
-Terraform Generator — Phase 1
+InfraMorph AI is an AI-assisted infrastructure engineering platform that converts a user's natural-language infrastructure requirements into a structured infrastructure specification and then into validated Terraform infrastructure-as-code. It interprets the requirement, validates the resulting specification, maps abstract resources to a target cloud provider (initially AWS and Azure), generates, formats and validates Terraform, runs a plan and cost estimate where safely possible, and requires explicit human approval before any deployment — infrastructure is never deployed silently.
 
-A project for generating Terraform infrastructure configurations through a structured, extensible architecture.
-
-## Status
-
-Phase 1 — Repository Setup
+Status: Milestone 1 in progress

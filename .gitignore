@@ -38,3 +38,6 @@ build/
 
 # Generated Terraform runs
 backend/generated/
+
+# Shared Terraform provider cache
+backend/.terraform-plugin-cache/

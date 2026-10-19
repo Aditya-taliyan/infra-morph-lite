@@ -1,0 +1,42 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.6",
+  "resource_changes": [
+    {
+      "address": "aws_vpc.main_vpc",
+      "type": "aws_vpc",
+      "name": "main_vpc",
+      "change": { "actions": ["create"] }
+    },
+    {
+      "address": "aws_subnet.main_vpc_public_a",
+      "type": "aws_subnet",
+      "name": "main_vpc_public_a",
+      "change": { "actions": ["create"] }
+    },
+    {
+      "address": "aws_security_group.web_sg",
+      "type": "aws_security_group",
+      "name": "web_sg",
+      "change": { "actions": ["update"] }
+    },
+    {
+      "address": "aws_instance.web_server",
+      "type": "aws_instance",
+      "name": "web_server",
+      "change": { "actions": ["delete", "create"] }
+    },
+    {
+      "address": "aws_internet_gateway.old",
+      "type": "aws_internet_gateway",
+      "name": "old",
+      "change": { "actions": ["delete"] }
+    },
+    {
+      "address": "aws_route_table.main_vpc_public",
+      "type": "aws_route_table",
+      "name": "main_vpc_public",
+      "change": { "actions": ["no-op"] }
+    }
+  ]
+}

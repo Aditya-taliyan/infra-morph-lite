@@ -31,6 +31,7 @@ source = [
     "app.core",
     "app.domain",
     "app.generators",
+    "app.infrastructure",
     "app.models",
     "app.providers",
     "app.services",

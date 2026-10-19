@@ -3,9 +3,13 @@ from pathlib import Path
 
 from app.domain.enums import Environment, Provider, Region
 from app.domain.resources import Subnet, VirtualNetwork
+from app.core.config import GENERATED_DIR
 from app.domain.spec import InfrastructureSpecification
+from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.domain.validation import ValidationResult
 from app.generators.terraform_generator import TerraformGenerator
+from app.infrastructure.terraform_runner import TerraformRunner
+from app.infrastructure.workspace import new_run_dir
 from app.providers.registry import get_provider
 from app.validators.semantic import validate
 
@@ -34,10 +38,29 @@ class GenerationResult:
     validation: ValidationResult
     # filename -> content; empty when validation found errors.
     files: dict[str, str] = field(default_factory=dict)
+    # Set by run_pipeline only.
+    run_id: str | None = None
+    output_dir: Path | None = None
+    # Terraform steps in the order they ran; stops after the first failure.
+    steps: list[CommandResult] = field(default_factory=list)
+    plan_summary: PlanSummary | None = None
+
+    @property
+    def terraform_ok(self) -> bool:
+        """No step failed or timed out (skipped steps are not failures)."""
+        return all(
+            s.status in (CommandStatus.PASSED, CommandStatus.SKIPPED) for s in self.steps
+        )
 
 
 class InfrastructureGenerationService:
-    """Semantic validation -> provider adapter -> Terraform generator."""
+    """Semantic validation -> provider adapter -> Terraform generator.
+
+    run_pipeline continues with terraform init -> fmt check -> validate -> plan.
+    """
+
+    def __init__(self, runner: TerraformRunner | None = None) -> None:
+        self.runner = runner or TerraformRunner()
 
     def generate(
         self, spec: InfrastructureSpecification, output_dir: Path | None = None
@@ -55,3 +78,27 @@ class InfrastructureGenerationService:
             generator.write(files, output_dir)
 
         return GenerationResult(validation=validation, files=files)
+
+    def run_pipeline(
+        self, spec: InfrastructureSpecification, generated_root: Path = GENERATED_DIR
+    ) -> GenerationResult:
+        """Generate into a fresh run directory, then check it with Terraform."""
+        validation = validate(spec)
+        if not validation.is_valid:
+            # No run directory for a spec that never reaches generation.
+            return GenerationResult(validation=validation)
+
+        run_id, run_dir = new_run_dir(generated_root)
+        result = self.generate(spec, output_dir=run_dir)
+        result.run_id = run_id
+        result.output_dir = run_dir
+
+        for check in (self.runner.init, self.runner.fmt_check, self.runner.validate):
+            step = check(run_dir)
+            result.steps.append(step)
+            if not result.terraform_ok:
+                return result
+
+        plan_steps, result.plan_summary = self.runner.plan(run_dir)
+        result.steps.extend(plan_steps)
+        return result

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # API request limits that protect the server (bytes, resources per spec).
     api_max_body_bytes: int = 100_000
     api_max_resources: int = 50
+    # Local Ollama for natural language -> IR. No API key: it runs on this machine.
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:7b"
+    # A 7B model on a laptop CPU can take a minute per answer.
+    ollama_timeout_seconds: float = 120
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

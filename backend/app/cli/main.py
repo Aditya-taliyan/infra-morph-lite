@@ -6,9 +6,16 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.version import __version__
+from app.domain.enums import Provider
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandStatus
-from app.services.generation import InfrastructureGenerationService, build_minimal_spec
+from app.providers.registry import UnsupportedProviderError
+from app.services.generation import (
+    GenerationResult,
+    InfrastructureGenerationService,
+    build_minimal_spec,
+)
+from app.services.spec_engine import SpecEngine
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,6 +40,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the full pipeline (validate, generate, terraform checks) on a spec file.",
     )
     from_spec.add_argument("spec", type=Path, help="Path to an IR spec JSON file.")
+
+    interpret = commands.add_parser(
+        "interpret",
+        help="Turn a natural-language requirement into a validated spec (prints the JSON).",
+    )
+    interpret.add_argument("requirement", help="The requirement, in quotes.")
+    interpret.add_argument(
+        "--provider", choices=[p.value for p in Provider], default=Provider.AWS.value
+    )
+    interpret.add_argument(
+        "--generate",
+        action="store_true",
+        help="Also run the full pipeline (generate, terraform checks) on the spec.",
+    )
 
     return parser
 
@@ -71,6 +92,9 @@ def main() -> None:
     if args.command == "generate-from-spec":
         sys.exit(generate_from_spec(args.spec))
 
+    if args.command == "interpret":
+        sys.exit(interpret(args.requirement, Provider(args.provider), args.generate))
+
 
 def print_issues(validation) -> None:
     for issue in validation.issues:
@@ -104,8 +128,20 @@ def generate_from_spec(path: Path) -> int:
         print(f"ERROR {exc}", file=sys.stderr)
         return 1
 
-    result = InfrastructureGenerationService().run_pipeline(spec)
+    return run_pipeline(spec)
 
+
+def run_pipeline(spec: InfrastructureSpecification) -> int:
+    """Run the full pipeline on a spec and print a report; returns the exit code."""
+    try:
+        result = InfrastructureGenerationService().run_pipeline(spec)
+    except UnsupportedProviderError as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 1
+    return print_pipeline_report(result)
+
+
+def print_pipeline_report(result: GenerationResult) -> int:
     print_issues(result.validation)
     if not result.validation.is_valid:
         print("Generation stopped: the specification has errors.", file=sys.stderr)
@@ -124,6 +160,34 @@ def generate_from_spec(path: Path) -> int:
         print(result.plan_summary.line())
 
     return 0 if result.terraform_ok else 1
+
+
+def interpret(requirement: str, provider: Provider, generate: bool) -> int:
+    """Print the spec JSON on stdout; everything else goes to stderr, so
+    `> spec.json` gives a file that generate-from-spec accepts."""
+    result = SpecEngine().interpret(requirement, provider)
+    final = result.final
+    if result.fallback_reason:
+        print(f"Fallback: {result.fallback_reason}", file=sys.stderr)
+    for note in final.notes:
+        print(f"NOTE {note}", file=sys.stderr)
+
+    if not result.ok:
+        for error in result.errors:
+            print(f"ERROR {error}", file=sys.stderr)
+        print("No valid specification could be made from the requirement.", file=sys.stderr)
+        return 1
+
+    attempts = "attempt" if final.attempts == 1 else "attempts"
+    print(f"Interpreter: {final.interpreter} ({final.attempts} {attempts})", file=sys.stderr)
+    print(final.spec.model_dump_json(indent=2))
+
+    if not generate:
+        print_issues(final.validation)
+        return 0
+    # The pipeline report prints the validation issues itself.
+    print("Running the pipeline on this spec...", file=sys.stderr)
+    return run_pipeline(final.spec)
 
 
 if __name__ == "__main__":

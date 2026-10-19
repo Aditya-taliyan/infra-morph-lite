@@ -1,0 +1,68 @@
+{
+  "schema_version": "1",
+  "name": "vpc-web",
+  "provider": "aws",
+  "region": "ap-south-1",
+  "environment": "dev",
+  "tags": {
+    "Project": "inframorph-demo"
+  },
+  "resources": [
+    {
+      "kind": "VirtualNetwork",
+      "name": "main-vpc",
+      "cidr": "10.10.0.0/16",
+      "subnets": [
+        {
+          "name": "public-a",
+          "cidr": "10.10.1.0/24",
+          "public": true
+        }
+      ]
+    },
+    {
+      "kind": "SecurityGroup",
+      "name": "web-sg",
+      "network": "main-vpc",
+      "rules": [
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 80,
+          "to_port": 80,
+          "cidr": "0.0.0.0/0"
+        },
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 443,
+          "to_port": 443,
+          "cidr": "0.0.0.0/0"
+        },
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 22,
+          "to_port": 22,
+          "cidr": "0.0.0.0/0"
+        },
+        {
+          "direction": "outbound",
+          "protocol": "all",
+          "cidr": "0.0.0.0/0"
+        }
+      ]
+    },
+    {
+      "kind": "ComputeInstance",
+      "name": "web-server",
+      "size": "medium",
+      "os": "ubuntu",
+      "subnet": "main-vpc.public-a",
+      "security_groups": [
+        "web-sg"
+      ],
+      "public_ip": true
+    }
+  ]
+}

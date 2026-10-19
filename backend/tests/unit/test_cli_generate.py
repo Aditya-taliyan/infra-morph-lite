@@ -26,3 +26,14 @@ def test_generate_command_requires_name(monkeypatch):
         main()
 
     assert exc_info.value.code == 2
+
+def test_generate_command_rejects_invalid_name(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["infra-morph", "generate", "Bad Name"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2

@@ -1,9 +1,9 @@
 from app.generators.terraform.basic import BasicTerraformGenerator
-from app.domain.infrastructure import InfrastructureSpec
+from app.services.generation import build_minimal_spec
 
 
 def test_basic_terraform_generator():
-    spec = InfrastructureSpec(name="demo")
+    spec = build_minimal_spec("demo")
 
     result = BasicTerraformGenerator().generate(spec)
 

@@ -1,0 +1,48 @@
+{
+  "schema_version": "1",
+  "name": "basic-web",
+  "provider": "aws",
+  "region": "us-east-1",
+  "environment": "dev",
+  "tags": {},
+  "resources": [
+    {
+      "kind": "VirtualNetwork",
+      "name": "web-vpc",
+      "cidr": "10.0.0.0/16",
+      "subnets": [
+        {
+          "name": "public-a",
+          "cidr": "10.0.1.0/24",
+          "public": true
+        }
+      ]
+    },
+    {
+      "kind": "SecurityGroup",
+      "name": "web-sg",
+      "network": "web-vpc",
+      "rules": [
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 80,
+          "to_port": 80,
+          "cidr": "0.0.0.0/0",
+          "description": "HTTP"
+        }
+      ]
+    },
+    {
+      "kind": "ComputeInstance",
+      "name": "web-server",
+      "size": "small",
+      "os": "ubuntu",
+      "subnet": "web-vpc.public-a",
+      "security_groups": [
+        "web-sg"
+      ],
+      "public_ip": true
+    }
+  ]
+}

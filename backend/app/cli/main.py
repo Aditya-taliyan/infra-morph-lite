@@ -1,6 +1,8 @@
 import argparse
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from app.core.version import __version__
 from app.services.generation import InfrastructureGenerationService
 
@@ -40,10 +42,13 @@ def main() -> None:
             parser.error("the generate command requires a project name")
 
         service = InfrastructureGenerationService()
-        result = service.generate(
-            args.name,
-            output_path=args.output,
-        )
+        try:
+            result = service.generate(
+                args.name,
+                output_path=args.output,
+            )
+        except ValidationError as exc:
+            parser.error(f"invalid specification: {exc}")
 
         if args.output is None:
             print(result, end="")

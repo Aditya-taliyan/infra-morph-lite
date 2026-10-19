@@ -1,0 +1,102 @@
+{
+  "schema_version": "1",
+  "name": "web-stack",
+  "provider": "aws",
+  "region": "us-east-1",
+  "environment": "staging",
+  "tags": {
+    "Owner": "student",
+    "Project": "inframorph-demo"
+  },
+  "resources": [
+    {
+      "kind": "VirtualNetwork",
+      "name": "app-vpc",
+      "cidr": "10.20.0.0/16",
+      "subnets": [
+        {
+          "name": "public-a",
+          "cidr": "10.20.1.0/24",
+          "public": true
+        },
+        {
+          "name": "private-a",
+          "cidr": "10.20.2.0/24",
+          "public": false
+        }
+      ]
+    },
+    {
+      "kind": "SecurityGroup",
+      "name": "web-sg",
+      "network": "app-vpc",
+      "rules": [
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 80,
+          "to_port": 80,
+          "cidr": "0.0.0.0/0"
+        },
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 443,
+          "to_port": 443,
+          "cidr": "0.0.0.0/0"
+        },
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 22,
+          "to_port": 22,
+          "cidr": "203.0.113.0/24",
+          "description": "SSH from admin network only"
+        }
+      ]
+    },
+    {
+      "kind": "SecurityGroup",
+      "name": "app-sg",
+      "network": "app-vpc",
+      "rules": [
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 8080,
+          "to_port": 8080,
+          "cidr": "10.20.1.0/24",
+          "description": "App traffic from public subnet"
+        }
+      ]
+    },
+    {
+      "kind": "ComputeInstance",
+      "name": "web-server",
+      "size": "small",
+      "os": "ubuntu",
+      "subnet": "app-vpc.public-a",
+      "security_groups": [
+        "web-sg"
+      ],
+      "public_ip": true
+    },
+    {
+      "kind": "ComputeInstance",
+      "name": "app-server",
+      "size": "medium",
+      "os": "ubuntu",
+      "subnet": "app-vpc.private-a",
+      "security_groups": [
+        "app-sg"
+      ],
+      "public_ip": false
+    },
+    {
+      "kind": "StorageBucket",
+      "name": "webstackassets01",
+      "versioning": true,
+      "public_access": false
+    }
+  ]
+}

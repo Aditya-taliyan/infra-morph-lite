@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +13,15 @@ from app.infrastructure.terraform_runner import TerraformRunner
 from app.infrastructure.workspace import new_run_dir
 from app.providers.registry import get_provider
 from app.validators.semantic import validate
+
+# Terraform runs share one data dir (see terraform_runner), so only one
+# pipeline may run at a time in this process. A second caller is refused
+# instead of queued, so an API client gets an immediate answer.
+_PIPELINE_LOCK = threading.Lock()
+
+
+class PipelineBusyError(RuntimeError):
+    """Another run_pipeline call is still in progress."""
 
 
 def build_minimal_spec(name: str) -> InfrastructureSpecification:
@@ -59,8 +69,11 @@ class InfrastructureGenerationService:
     run_pipeline continues with terraform init -> fmt check -> validate -> plan.
     """
 
-    def __init__(self, runner: TerraformRunner | None = None) -> None:
+    def __init__(
+        self, runner: TerraformRunner | None = None, generated_root: Path = GENERATED_DIR
+    ) -> None:
         self.runner = runner or TerraformRunner()
+        self.generated_root = generated_root
 
     def generate(
         self, spec: InfrastructureSpecification, output_dir: Path | None = None
@@ -80,9 +93,24 @@ class InfrastructureGenerationService:
         return GenerationResult(validation=validation, files=files)
 
     def run_pipeline(
-        self, spec: InfrastructureSpecification, generated_root: Path = GENERATED_DIR
+        self, spec: InfrastructureSpecification, generated_root: Path | None = None
     ) -> GenerationResult:
-        """Generate into a fresh run directory, then check it with Terraform."""
+        """Generate into a fresh run directory, then check it with Terraform.
+
+        Raises UnsupportedProviderError (before any validation or file is
+        written) and PipelineBusyError (if another run is in progress).
+        """
+        get_provider(spec.provider)
+        if not _PIPELINE_LOCK.acquire(blocking=False):
+            raise PipelineBusyError("another generation is in progress")
+        try:
+            return self._run_pipeline(spec, generated_root or self.generated_root)
+        finally:
+            _PIPELINE_LOCK.release()
+
+    def _run_pipeline(
+        self, spec: InfrastructureSpecification, generated_root: Path
+    ) -> GenerationResult:
         validation = validate(spec)
         if not validation.is_valid:
             # No run directory for a spec that never reaches generation.

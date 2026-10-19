@@ -8,9 +8,12 @@ version = "0.1.0"
 description = "Backend service for Infra Morph Lite"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.146,<1",
+    "httpx>=0.28,<1",
     "jinja2>=3.1,<4",
     "pydantic>=2.13,<3",
-    "pydantic-settings>=2.15,<3"
+    "pydantic-settings>=2.15,<3",
+    "uvicorn[standard]>=0.54,<1"
 ]
 
 [project.optional-dependencies]
@@ -27,6 +30,7 @@ where = ["."]
 
 [tool.coverage.run]
 source = [
+    "app.api",
     "app.cli",
     "app.core",
     "app.domain",

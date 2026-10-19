@@ -47,6 +47,10 @@ LOCK_FILE = ".terraform.lock.hcl"
 _SHARED_DATA_DIR_LOCK = threading.Lock()
 
 
+def terraform_available() -> bool:
+    return shutil.which("terraform") is not None
+
+
 class TerraformRunner:
     def __init__(
         self, config: Settings = settings, shared_data_dir: Path = SHARED_DATA_DIR

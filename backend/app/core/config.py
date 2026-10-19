@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # init downloads providers, so it gets longer than the other commands.
     terraform_init_timeout_seconds: float = 120
     terraform_timeout_seconds: float = 60
+    # API request limits that protect the server (bytes, resources per spec).
+    api_max_body_bytes: int = 100_000
+    api_max_resources: int = 50
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

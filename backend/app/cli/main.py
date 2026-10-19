@@ -104,10 +104,12 @@ def print_issues(validation) -> None:
 def load_spec_file(path: Path) -> InfrastructureSpecification:
     """Read and schema-validate a spec file; raises ValueError with a readable message."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # Bytes, not text: json detects UTF-8, UTF-8 with BOM and UTF-16, so a
+        # file made with PowerShell's ">" (BOM or UTF-16) loads too.
+        data = json.loads(path.read_bytes())
     except OSError as exc:
         raise ValueError(f"cannot read {path}: {exc.strerror or exc}") from exc
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
     try:

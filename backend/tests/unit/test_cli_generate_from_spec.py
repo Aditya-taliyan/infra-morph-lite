@@ -71,6 +71,17 @@ def test_invalid_json_exits_1(monkeypatch, capsys, tmp_path: Path):
     assert "is not valid JSON" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
+def test_powershell_redirect_encodings_load(
+    monkeypatch, tmp_path: Path, fake_pipeline, encoding
+):
+    # PowerShell's ">" writes UTF-8 with BOM (7.x settings) or UTF-16 (5.1 default).
+    spec = tmp_path / "spec.json"
+    spec.write_text(DEMO2.read_text(encoding="utf-8"), encoding=encoding)
+
+    assert _run(monkeypatch, str(spec)) == 0
+
+
 def test_schema_errors_are_readable(monkeypatch, capsys, tmp_path: Path):
     data = json.loads(DEMO2.read_text(encoding="utf-8"))
     data["resources"][2]["size"] = "enormous"

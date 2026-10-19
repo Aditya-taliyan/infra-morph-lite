@@ -39,5 +39,8 @@ build/
 # Generated Terraform runs
 backend/generated/
 
-# Shared Terraform provider cache
+# Shared Terraform data directory (TF_DATA_DIR for every run)
+backend/.terraform-shared/
+
 backend/.terraform-plugin-cache/
+backend/.terraform-shared/

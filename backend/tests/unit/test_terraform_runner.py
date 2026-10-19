@@ -19,7 +19,7 @@ def runner(tmp_path: Path) -> TerraformRunner:
     config = Settings(
         _env_file=None, terraform_init_timeout_seconds=120, terraform_timeout_seconds=60
     )
-    return TerraformRunner(config=config, plugin_cache_dir=tmp_path / "cache")
+    return TerraformRunner(config=config, shared_data_dir=tmp_path / "shared")
 
 
 @pytest.fixture
@@ -168,12 +168,86 @@ def test_cloud_credentials_never_reach_terraform(runner, run_mock, monkeypatch, 
     assert env["INFRAMORPH_KEEP_ME"] == "yes"
 
 
-def test_plugin_cache_dir_is_created_and_passed(runner, run_mock, tmp_path):
-    runner.init(tmp_path)
+def test_shared_data_dir_is_created_and_passed(runner, run_mock, monkeypatch, tmp_path):
+    monkeypatch.setenv("TF_PLUGIN_CACHE_DIR", "/somewhere/else")
+
+    runner.validate(tmp_path)
 
     env = run_mock.call_args.kwargs["env"]
-    assert env["TF_PLUGIN_CACHE_DIR"] == str(tmp_path / "cache")
-    assert (tmp_path / "cache").is_dir()
+    assert env["TF_DATA_DIR"] == str((tmp_path / "shared").resolve())
+    assert Path(env["TF_DATA_DIR"]).is_absolute()
+    assert "TF_PLUGIN_CACHE_DIR" not in env  # would only add another copy
+    assert (tmp_path / "shared").is_dir()
+
+
+@pytest.fixture
+def run_dir(tmp_path: Path) -> Path:
+    path = tmp_path / "run"
+    path.mkdir()
+    return path
+
+
+def _init_writes_lock(content: str):
+    """subprocess.run fake: init writes a lock file into cwd, like terraform."""
+
+    def run(args, cwd, **_kwargs):
+        if not (cwd / ".terraform.lock.hcl").exists():
+            (cwd / ".terraform.lock.hcl").write_text(content, encoding="utf-8")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    return run
+
+
+def test_first_init_saves_lock_file_to_shared_dir(runner, run_mock, run_dir, tmp_path):
+    run_mock.side_effect = _init_writes_lock("lock v1")
+
+    result = runner.init(run_dir)
+
+    assert result.status is CommandStatus.PASSED
+    assert (tmp_path / "shared" / ".terraform.lock.hcl").read_text(encoding="utf-8") == "lock v1"
+
+
+def test_saved_lock_file_is_copied_into_run_dir_before_init(runner, run_mock, run_dir, tmp_path):
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / ".terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
+    seen = {}
+
+    def run(args, cwd, **_kwargs):
+        seen["lock"] = (cwd / ".terraform.lock.hcl").read_text(encoding="utf-8")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    run_mock.side_effect = run
+
+    runner.init(run_dir)
+
+    assert seen["lock"] == "saved lock"  # present before terraform ran
+
+
+def test_failed_init_does_not_overwrite_saved_lock_and_gives_hint(
+    runner, run_mock, run_dir, tmp_path
+):
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / ".terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
+    (run_dir / "marker").touch()
+    run_mock.return_value = subprocess.CompletedProcess(
+        args=[], returncode=1, stdout="", stderr="Error: locked provider mismatch"
+    )
+
+    result = runner.init(run_dir)
+
+    assert result.status is CommandStatus.FAILED
+    assert result.stderr.startswith("Error: locked provider mismatch")
+    assert "delete" in result.stderr and "saved lock file" in result.stderr
+    assert (tmp_path / "shared" / ".terraform.lock.hcl").read_text(encoding="utf-8") == "saved lock"
+
+
+def test_skipped_init_touches_no_lock_files(runner, run_mock, monkeypatch, run_dir, tmp_path):
+    monkeypatch.setattr("app.infrastructure.terraform_runner.shutil.which", lambda _name: None)
+
+    result = runner.init(run_dir)
+
+    assert result.status is CommandStatus.SKIPPED
+    assert not (tmp_path / "shared" / ".terraform.lock.hcl").exists()
 
 
 def test_environment_is_not_in_the_result(runner, run_mock, monkeypatch, tmp_path):

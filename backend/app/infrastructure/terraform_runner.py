@@ -8,37 +8,83 @@ Safety rules enforced here:
 - The child environment has every AWS_*, ARM_* and AZURE_* variable removed,
   so real cloud credentials on this machine can never reach Terraform.
 - The environment is never logged or returned.
+
+Shared data directory (performance, mainly on Windows):
+Every run uses one persistent TF_DATA_DIR (backend/.terraform-shared/), so
+the AWS provider is installed there once and reused. A plugin cache alone is
+not enough on Windows: Terraform cannot symlink from the cache, so it copied
+the provider (hundreds of MB) into every run and antivirus scanned each copy.
+After the first successful init, the run's .terraform.lock.hcl is saved in
+the shared directory and copied into each new run directory before init, so
+later inits only verify the installed provider against the lock instead of
+asking the registry. The .tf files and plan.tfplan stay in the run directory,
+so runs remain isolated.
+
+Concurrency: the shared directory assumes one Terraform command at a time.
+A process-wide lock serialises commands within this process (CLI, or the API
+server's worker threads). Two separate processes (e.g. two CLI runs started
+at once) are NOT coordinated; this is a single-user tool, so do not run them
+in parallel.
 """
 
 import json
 import os
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
-from app.core.config import PLUGIN_CACHE_DIR, Settings, settings
+from app.core.config import SHARED_DATA_DIR, Settings, settings
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 
 ALLOWED_SUBCOMMANDS = frozenset({"init", "fmt", "validate", "plan", "show"})
 CREDENTIAL_PREFIXES = ("AWS_", "ARM_", "AZURE_")
 PLAN_FILE = "plan.tfplan"
+LOCK_FILE = ".terraform.lock.hcl"
+
+# One Terraform command at a time uses the shared data dir (see module docstring).
+_SHARED_DATA_DIR_LOCK = threading.Lock()
 
 
 class TerraformRunner:
     def __init__(
-        self, config: Settings = settings, plugin_cache_dir: Path = PLUGIN_CACHE_DIR
+        self, config: Settings = settings, shared_data_dir: Path = SHARED_DATA_DIR
     ) -> None:
         self.config = config
-        self.plugin_cache_dir = plugin_cache_dir
+        self.shared_data_dir = shared_data_dir
+
+    @property
+    def shared_lock_file(self) -> Path:
+        return self.shared_data_dir / LOCK_FILE
 
     def init(self, directory: Path) -> CommandResult:
-        return self._run(
+        run_lock = directory / LOCK_FILE
+        seeded = self.shared_lock_file.is_file() and not run_lock.exists()
+        if seeded:
+            shutil.copyfile(self.shared_lock_file, run_lock)
+
+        result = self._run(
             "init",
             ["-backend=false", "-input=false", "-no-color"],
             directory,
             self.config.terraform_init_timeout_seconds,
         )
+
+        if result.status is CommandStatus.PASSED and run_lock.is_file():
+            # Keep the shared copy current (it changes only if the provider
+            # version in the templates changes).
+            shutil.copyfile(run_lock, self.shared_lock_file)
+        elif result.status is CommandStatus.FAILED and seeded:
+            result = result.model_copy(
+                update={
+                    "stderr": result.stderr
+                    + f"\nHint: init used the saved lock file {self.shared_lock_file}. "
+                    "If the provider version in the templates changed, delete "
+                    f"{self.shared_data_dir} and run again."
+                }
+            )
+        return result
 
     def fmt_check(self, directory: Path) -> CommandResult:
         # -check: report unformatted files (exit 3) instead of rewriting them.
@@ -102,14 +148,15 @@ class TerraformRunner:
 
         start = time.monotonic()
         try:
-            completed = subprocess.run(
-                [binary, subcommand, *args],
-                cwd=cwd,
-                env=self._child_env(),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+            with _SHARED_DATA_DIR_LOCK:
+                completed = subprocess.run(
+                    [binary, subcommand, *args],
+                    cwd=cwd,
+                    env=self._child_env(),
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
         except subprocess.TimeoutExpired:
             return CommandResult(
                 command=command,
@@ -134,8 +181,11 @@ class TerraformRunner:
             for key, value in os.environ.items()
             if not key.upper().startswith(CREDENTIAL_PREFIXES)
         }
-        self.plugin_cache_dir.mkdir(parents=True, exist_ok=True)
-        env["TF_PLUGIN_CACHE_DIR"] = str(self.plugin_cache_dir)
+        self.shared_data_dir.mkdir(parents=True, exist_ok=True)
+        # Absolute path: Terraform would resolve a relative one against cwd.
+        env["TF_DATA_DIR"] = str(self.shared_data_dir.resolve())
+        # Not needed with a shared data dir, and it would add one more copy.
+        env.pop("TF_PLUGIN_CACHE_DIR", None)
         env["TF_IN_AUTOMATION"] = "1"  # shorter output, no "run terraform apply" hints
         env["CHECKPOINT_DISABLE"] = "1"  # no version-check call to HashiCorp
         return env

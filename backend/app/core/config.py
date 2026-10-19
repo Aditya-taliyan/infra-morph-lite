@@ -6,8 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 # One isolated directory per generation run (gitignored).
 GENERATED_DIR = BACKEND_DIR / "generated"
-# Shared by all runs so the AWS provider is downloaded once (gitignored).
-PLUGIN_CACHE_DIR = BACKEND_DIR / ".terraform-plugin-cache"
+# TF_DATA_DIR shared by all runs: the AWS provider is installed once and
+# never copied per run; also holds the saved .terraform.lock.hcl (gitignored).
+SHARED_DATA_DIR = BACKEND_DIR / ".terraform-shared"
 
 
 class Settings(BaseSettings):

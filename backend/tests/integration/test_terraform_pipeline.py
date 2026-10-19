@@ -1,7 +1,7 @@
 """Runs the real terraform binary. Excluded from "pytest -q" by pytest.ini; run with "pytest -m integration".
 
-The first run needs internet to download the AWS provider into
-backend/.terraform-plugin-cache/; later runs reuse the cache.
+The first run needs internet to install the AWS provider into the shared
+data directory backend/.terraform-shared/; later runs reuse it.
 """
 
 import shutil

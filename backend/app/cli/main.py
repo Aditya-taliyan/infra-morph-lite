@@ -1,10 +1,11 @@
 import argparse
+import sys
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.core.version import __version__
-from app.services.generation import InfrastructureGenerationService
+from app.services.generation import InfrastructureGenerationService, build_minimal_spec
 
 
 def main() -> None:
@@ -28,7 +29,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        help="Path where generated Terraform should be written.",
+        help="Directory where the generated Terraform files should be written.",
     )
 
     args = parser.parse_args()
@@ -41,17 +42,22 @@ def main() -> None:
         if not args.name:
             parser.error("the generate command requires a project name")
 
-        service = InfrastructureGenerationService()
         try:
-            result = service.generate(
-                args.name,
-                output_path=args.output,
-            )
+            spec = build_minimal_spec(args.name)
         except ValidationError as exc:
             parser.error(f"invalid specification: {exc}")
 
+        result = InfrastructureGenerationService().generate(spec, output_dir=args.output)
+
+        for issue in result.validation.issues:
+            print(f"{issue.severity.value.upper()} {issue.code}: {issue.message}", file=sys.stderr)
+        if not result.validation.is_valid:
+            parser.exit(2, "Generation stopped: the specification has errors.\n")
+
         if args.output is None:
-            print(result, end="")
+            for filename, content in result.files.items():
+                print(f"# --- {filename} ---")
+                print(content, end="")
         else:
             print(f"Generated Terraform: {args.output}")
 

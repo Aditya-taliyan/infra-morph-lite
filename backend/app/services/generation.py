@@ -1,10 +1,13 @@
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.domain.enums import Environment, Provider, Region
 from app.domain.resources import Subnet, VirtualNetwork
 from app.domain.spec import InfrastructureSpecification
-from app.generators.terraform.basic import BasicTerraformGenerator
-from app.services.output import TerraformOutputService
+from app.domain.validation import ValidationResult
+from app.generators.terraform_generator import TerraformGenerator
+from app.providers.registry import get_provider
+from app.validators.semantic import validate
 
 
 def build_minimal_spec(name: str) -> InfrastructureSpecification:
@@ -26,16 +29,29 @@ def build_minimal_spec(name: str) -> InfrastructureSpecification:
     )
 
 
+@dataclass
+class GenerationResult:
+    validation: ValidationResult
+    # filename -> content; empty when validation found errors.
+    files: dict[str, str] = field(default_factory=dict)
+
+
 class InfrastructureGenerationService:
-    def __init__(self) -> None:
-        self.generator = BasicTerraformGenerator()
-        self.output_service = TerraformOutputService()
+    """Semantic validation -> provider adapter -> Terraform generator."""
 
-    def generate(self, name: str, output_path: Path | None = None) -> str:
-        spec = build_minimal_spec(name)
-        content = self.generator.generate(spec)
+    def generate(
+        self, spec: InfrastructureSpecification, output_dir: Path | None = None
+    ) -> GenerationResult:
+        validation = validate(spec)
+        if not validation.is_valid:
+            return GenerationResult(validation=validation)
 
-        if output_path is not None:
-            self.output_service.write(content, output_path)
+        adapter = get_provider(spec.provider)
+        context = adapter.build_context(spec)
+        generator = TerraformGenerator(adapter.template_dir)
+        files = generator.render(context)
 
-        return content
+        if output_dir is not None:
+            generator.write(files, output_dir)
+
+        return GenerationResult(validation=validation, files=files)

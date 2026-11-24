@@ -9,6 +9,8 @@ GENERATED_DIR = BACKEND_DIR / "generated"
 # TF_DATA_DIR shared by all runs: the AWS provider is installed once and
 # never copied per run; also holds the saved .terraform.lock.hcl (gitignored).
 SHARED_DATA_DIR = BACKEND_DIR / ".terraform-shared"
+# One JSON file per human approval (gitignored).
+APPROVALS_DIR = BACKEND_DIR / "approvals"
 
 
 class Settings(BaseSettings):

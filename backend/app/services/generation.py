@@ -10,7 +10,8 @@ from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.domain.validation import ValidationResult
 from app.generators.terraform_generator import TerraformGenerator
 from app.infrastructure.terraform_runner import TerraformRunner
-from app.infrastructure.workspace import new_run_dir
+from app.domain.approval import files_hash
+from app.infrastructure.workspace import new_run_dir, read_tf_files, write_run_record
 from app.providers.registry import get_provider
 from app.validators.semantic import validate
 
@@ -105,9 +106,12 @@ class InfrastructureGenerationService:
         if not _PIPELINE_LOCK.acquire(blocking=False):
             raise PipelineBusyError("another generation is in progress")
         try:
-            return self._run_pipeline(spec, generated_root or self.generated_root)
+            result = self._run_pipeline(spec, generated_root or self.generated_root)
         finally:
             _PIPELINE_LOCK.release()
+        if result.output_dir is not None:
+            _save_run_record(spec, result)
+        return result
 
     def _run_pipeline(
         self, spec: InfrastructureSpecification, generated_root: Path
@@ -147,3 +151,24 @@ class InfrastructureGenerationService:
         plan_steps, result.plan_summary = self.runner.plan(run_dir)
         result.steps.extend(plan_steps)
         return result
+
+
+def _save_run_record(spec: InfrastructureSpecification, result: GenerationResult) -> None:
+    """What the approval service checks later, so it never trusts the client.
+
+    files_hash is taken now, right after the checks, so a .tf file edited
+    afterwards no longer matches the run that passed.
+    """
+    write_run_record(
+        result.output_dir,
+        {
+            "run_id": result.run_id,
+            "provider": str(spec.provider),
+            "spec": spec.model_dump(mode="json"),
+            "steps": [{"step": s.step, "status": str(s.status)} for s in result.steps],
+            "plan_summary": (
+                result.plan_summary.model_dump(mode="json") if result.plan_summary else None
+            ),
+            "files_hash": files_hash(read_tf_files(result.output_dir)),
+        },
+    )

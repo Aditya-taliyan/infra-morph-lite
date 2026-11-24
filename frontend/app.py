@@ -8,7 +8,6 @@ decision (validation, generation, plan) is made by the backend.
 """
 
 import json
-from datetime import datetime
 
 import streamlit as st
 
@@ -137,10 +136,26 @@ def parse_spec_text() -> dict | None:
     return spec
 
 
-def plan_passed(generation: dict) -> bool:
-    return generation["plan_summary"] is not None and any(
-        s["step"] == "terraform plan" and s["status"] == "passed" for s in generation["steps"]
+def can_be_approved(generation: dict) -> bool:
+    """Mirrors the backend rule, which decides: validate passed, and plan passed
+    (AWS) or was skipped by design (Azure). A skipped validate means no terraform."""
+    status = {s["step"]: s["status"] for s in generation["steps"]}
+    return status.get("terraform validate") == "passed" and status.get("terraform plan") in (
+        "passed",
+        "skipped",
     )
+
+
+def show_approval_record(record: dict) -> None:
+    st.markdown(
+        f"- Approval ID: `{record['approval_id']}`\n"
+        f"- Run ID: `{record['run_id']}`\n"
+        f"- Approved by: {record['approved_by']} at {record['approved_at']} (UTC)\n"
+        f"- Spec hash: `{record['spec_hash']}`\n"
+        f"- Files hash: `{record['files_hash']}`"
+    )
+    if record.get("comment"):
+        st.caption(f"Comment: {record['comment']}")
 
 
 st.set_page_config(page_title="InfraMorph AI", page_icon=":material/cloud:", layout="wide")
@@ -165,7 +180,7 @@ with st.sidebar:
     st.divider()
     st.caption(
         "Demo mode: InfraMorph generates and checks Terraform but never runs "
-        "`terraform apply`. Approval is recorded in this session only."
+        "`terraform apply`. An approval is stored as a JSON record on the backend."
     )
 
 st.title("InfraMorph AI")
@@ -290,25 +305,47 @@ if interpretation is not None and generation is not None:
 # ---------------------------------------------------------------- 6. Approval
 if interpretation is not None and generation is not None:
     st.header("6. Approval")
-    can_approve = plan_passed(generation)
+    can_approve = can_be_approved(generation)
     if not can_approve:
-        st.warning("Approval is only possible after `terraform plan` has passed.")
+        st.warning(
+            "Approval is only possible after `terraform validate` and `terraform plan` "
+            "have passed (Azure: plan is skipped by design)."
+        )
     reviewed = st.checkbox(
         "I have reviewed the specification, Terraform and plan",
         key="reviewed",
         disabled=not can_approve,
     )
-    if st.button("Approve", type="primary", disabled=not (can_approve and reviewed)):
-        st.session_state.approval = {
-            "run_id": generation["run_id"],
-            "approved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
+    approver = st.text_input("Your name", key="approver", max_chars=80).strip()
+    comment = st.text_area("Comment (optional)", key="approval_comment", max_chars=500)
+    if st.button(
+        "Approve", type="primary", disabled=not (can_approve and reviewed and approver)
+    ):
+        st.session_state.approval = call_api(
+            client.approve, generation["run_id"], approver, comment.strip() or None
+        )
     approval = st.session_state.get("approval")
     if approval:
-        st.success(
-            f"Design approved — run `{approval['run_id']}` at {approval['approved_at']}."
-        )
+        st.success(f"Design approved and stored — run `{approval['run_id']}`.")
+        show_approval_record(approval)
         st.info(
             "InfraMorph does not deploy by design: `terraform apply` is never run. "
             "The approved Terraform can be applied by an operator with real cloud credentials."
         )
+
+# ---------------------------------------------------------------- sidebar: history
+# Rendered last, so an approval made in this rerun is already listed.
+with st.sidebar:
+    with st.expander("Approval history"):
+        try:
+            history = client.list_approvals()
+        except (BackendUnreachable, ApiError):
+            st.caption("Approval history could not be loaded.")
+        else:
+            if not history:
+                st.caption("No approvals yet.")
+            for record in history:
+                st.markdown(
+                    f"**{record['approved_by']}** · {record['provider']} · "
+                    f"{record['approved_at']}  \n`{record['run_id']}`"
+                )

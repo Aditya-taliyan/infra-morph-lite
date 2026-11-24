@@ -14,6 +14,8 @@ DEFAULT_BACKEND_URL = "http://127.0.0.1:8000"
 API_PREFIX = "/api/v1"
 
 HEALTH_TIMEOUT_SECONDS = 3
+# Approvals only read and write small JSON files.
+FAST_TIMEOUT_SECONDS = 10
 # The backend may try Ollama 3 times at up to 120 s each, and a Terraform
 # run is init + fmt + validate + plan; both stay under this limit.
 SLOW_TIMEOUT_SECONDS = 400
@@ -64,7 +66,17 @@ class InfraMorphClient:
     def generate(self, spec: dict) -> dict:
         return self._request("POST", "/generate", json=spec, timeout=SLOW_TIMEOUT_SECONDS)
 
-    def _request(self, method: str, path: str, timeout: float, json: Any = None) -> dict:
+    def approve(self, run_id: str, approved_by: str, comment: str | None = None) -> dict:
+        body = {"run_id": run_id, "approved_by": approved_by, "comment": comment}
+        return self._request("POST", "/approvals", json=body, timeout=FAST_TIMEOUT_SECONDS)
+
+    def list_approvals(self) -> list[dict]:
+        return self._request("GET", "/approvals", timeout=FAST_TIMEOUT_SECONDS)
+
+    def get_approval(self, approval_id: str) -> dict:
+        return self._request("GET", f"/approvals/{approval_id}", timeout=FAST_TIMEOUT_SECONDS)
+
+    def _request(self, method: str, path: str, timeout: float, json: Any = None) -> Any:
         try:
             with httpx.Client(
                 base_url=self.base_url + API_PREFIX, timeout=timeout, transport=self._transport

@@ -259,6 +259,43 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/generate `
   { "error": { "code": "internal_error", "message": "An unexpected error occurred. See the server log.", "details": null } }
   ```
 
+## POST /approvals
+
+Store a human approval of a checked run. Records a decision only: `terraform apply` is never run.
+
+Request (no other fields allowed; hashes, time and plan are computed by the server from the run directory):
+
+```json
+{ "run_id": "20261124T100000Z-a1b2c3", "approved_by": "Aditya", "comment": "Reviewed with the team" }
+```
+
+`approved_by`: 1–80 chars. `comment`: optional, max 500.
+
+Rules: the run must exist; `terraform validate` must have passed; for AWS `terraform plan` must have passed, for Azure it is skipped by design. The `.tf` files must still match the hash taken when the run was checked. One approval per run.
+
+Response 200, also saved as `backend/approvals/<approval_id>.json`:
+
+```json
+{
+  "approval_id": "3f0c…", "run_id": "20261124T100000Z-a1b2c3",
+  "approved_by": "Aditya", "comment": "Reviewed with the team",
+  "approved_at": "2026-11-24T10:00:00Z", "provider": "aws",
+  "plan_summary": { "to_add": 11, "to_change": 0, "to_destroy": 0, "resource_addresses": ["…"] },
+  "spec_hash": "<sha256 of the canonical spec JSON>",
+  "files_hash": "<sha256 over the .tf files, sorted by name>"
+}
+```
+
+Errors: 404 `run_not_found`; 409 `already_approved` (`details.approval_id` is the existing record); 422 `validation_not_passed`, `plan_not_passed`, `run_modified`, or `schema_validation_failed` for a bad body.
+
+## GET /approvals
+
+All stored approvals, newest first (`[]` when there are none).
+
+## GET /approvals/{approval_id}
+
+One record, or 404 `approval_not_found`.
+
 ## Limits and settings
 
 | Setting (env var / `backend/.env`) | Default | Effect |

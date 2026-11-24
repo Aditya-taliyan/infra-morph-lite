@@ -39,6 +39,9 @@ build/
 # Generated Terraform runs
 backend/generated/
 
+# Stored approval records
+backend/approvals/
+
 # Shared Terraform data directory (TF_DATA_DIR for every run)
 backend/.terraform-shared/
 

@@ -268,7 +268,7 @@ python backend\scripts\run_demos.py --rule-based  # same, rule-based interpreter
 - **AMI IDs are examples.** The AMI comes from a `locals` map of region → example Ubuntu 22.04 AMI ID, merged with an optional `ubuntu_ami_overrides` variable. This lets the plan run offline without data sources. Before a real deploy, set the override to current AMIs for the chosen region.
 - **Bucket names must be globally unique on a real deploy.** S3 names are global. The plan runs with mock credentials, so it cannot detect a name that is already taken.
 - **Azure plan needs a real login.** Even when Azure generation is added, it will stop at `terraform fmt` and `validate`. `terraform plan` for `azurerm` needs real Azure credentials, which this project does not use.
-- **Milestone 2 work:** Azure generation and cost estimation (Infracost) are not in Milestone 1. The approval is held in the Streamlit session only; a persistent approval record is Milestone 2.
+- **Milestone 2 work:** Azure generation and cost estimation (Infracost) are not in Milestone 1. Approvals are stored as JSON records in `backend/approvals/` (see `docs/API.md`).
 - **Deployment is out of scope by design.** InfraMorph never runs `terraform apply` or `terraform destroy`. A plan is the furthest it goes.
 
 ## Roadmap (Milestone 2, due 30 Nov 2026)

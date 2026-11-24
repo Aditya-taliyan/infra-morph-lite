@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.generators.terraform_generator import FILES
-from app.infrastructure.workspace import new_run_dir
+from app.infrastructure.workspace import RUN_RECORD, new_run_dir, read_run_record
 from app.services.generation import InfrastructureGenerationService
 from tests.helpers import load_spec, resource
 
@@ -55,7 +55,11 @@ def test_pipeline_writes_run_dir_and_runs_all_steps(tmp_path: Path):
 
     assert re.fullmatch(r"\d{8}T\d{6}Z-[0-9a-f]{6}", result.run_id)
     assert result.output_dir == tmp_path / result.run_id
-    assert sorted(p.name for p in result.output_dir.iterdir()) == sorted(FILES)
+    assert sorted(p.name for p in result.output_dir.iterdir()) == sorted([*FILES, RUN_RECORD])
+    record = read_run_record(result.output_dir)
+    assert record["run_id"] == result.run_id
+    assert record["provider"] == "aws"
+    assert record["steps"][2] == {"step": "terraform validate", "status": "passed"}
     assert [name for name, _ in runner.calls] == ["init", "fmt", "validate", "plan"]
     assert {d for _, d in runner.calls} == {result.output_dir}
     assert [s.step for s in result.steps] == [

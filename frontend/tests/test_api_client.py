@@ -108,3 +108,35 @@ def test_backend_url_from_env(monkeypatch):
     monkeypatch.setenv("BACKEND_URL", "http://example.test:9000/")
     assert backend_url() == "http://example.test:9000"
     assert InfraMorphClient().base_url == "http://example.test:9000"
+
+
+def test_approval_calls():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, json.loads(request.content) if request.content else None))
+        if request.method == "GET" and request.url.path.endswith("/approvals"):
+            return httpx.Response(200, json=[{"approval_id": "a1"}])
+        return httpx.Response(200, json={"approval_id": "a1"})
+
+    client = client_with(handler)
+    assert client.approve("run-1", "Aditya", "ok") == {"approval_id": "a1"}
+    assert client.list_approvals() == [{"approval_id": "a1"}]
+    assert client.get_approval("a1") == {"approval_id": "a1"}
+    assert seen == [
+        ("POST", "/api/v1/approvals", {"run_id": "run-1", "approved_by": "Aditya", "comment": "ok"}),
+        ("GET", "/api/v1/approvals", None),
+        ("GET", "/api/v1/approvals/a1", None),
+    ]
+
+
+def test_reapproval_conflict_is_api_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409, json={"error": {"code": "already_approved", "message": "already", "details": {"approval_id": "a1"}}}
+        )
+
+    with pytest.raises(ApiError) as info:
+        client_with(handler).approve("run-1", "Aditya")
+    assert info.value.status_code == 409
+    assert info.value.details == {"approval_id": "a1"}

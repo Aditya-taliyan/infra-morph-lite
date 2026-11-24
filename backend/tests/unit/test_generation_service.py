@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from app.generators.terraform_generator import FILES
 from app.services.generation import InfrastructureGenerationService, build_minimal_spec
 from tests.helpers import load_spec, resource
@@ -46,7 +44,8 @@ def test_invalid_spec_never_reaches_adapter_or_generator(monkeypatch, tmp_path: 
     assert not (tmp_path / "out").exists()
 
 
-def test_azure_spec_reports_not_implemented():
+def test_azure_spec_generates_azurerm_files():
     spec = load_spec("demo5", lambda d: d.update(provider="azure", region="centralindia"))
-    with pytest.raises(NotImplementedError, match="Milestone 2"):
-        InfrastructureGenerationService().generate(spec)
+    result = InfrastructureGenerationService().generate(spec)
+    assert tuple(result.files) == FILES
+    assert 'resource "azurerm_resource_group" "main"' in result.files["main.tf"]

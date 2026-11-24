@@ -48,6 +48,7 @@ def test_failed_terraform_step_is_still_200(tmp_path: Path):
     assert body["steps"][-1]["status"] == "failed"
     assert "simulated failure" in body["steps"][-1]["stderr"]
     assert body["plan_summary"] is None
+    assert "plan" not in runner.calls
 
 
 def test_semantic_errors_return_422_and_never_run_terraform(tmp_path: Path):
@@ -68,21 +69,20 @@ def test_semantic_errors_return_422_and_never_run_terraform(tmp_path: Path):
     assert list(tmp_path.iterdir()) == []  # no run directory either
 
 
-def test_azure_returns_400(tmp_path: Path):
+def test_azure_generates_and_skips_plan(tmp_path: Path):
     runner = FakeRunner()
 
-    def to_azure(data):
-        data["provider"] = "azure"
-        data["region"] = "eastus"
+    response = make_client(runner, tmp_path).post(URL, json=spec_json("demo4_azure"))
 
-    response = make_client(runner, tmp_path).post(URL, json=spec_json("demo2", to_azure))
-
-    assert response.status_code == 400
-    error = response.json()["error"]
-    assert error["code"] == "unsupported_provider"
-    assert "Milestone 2" in error["message"]
-    assert runner.calls == []
-    assert list(tmp_path.iterdir()) == []
+    assert response.status_code == 200
+    body = response.json()
+    assert 'resource "azurerm_linux_virtual_machine"' in body["files"]["main.tf"]
+    assert [s["step"] for s in body["steps"]] == [
+        "terraform init", "terraform fmt", "terraform validate", "terraform plan"
+    ]
+    assert body["steps"][-1]["status"] == "skipped"
+    assert body["plan_summary"] is None
+    assert "plan" not in runner.calls
 
 
 def test_concurrent_generate_returns_409(tmp_path: Path):

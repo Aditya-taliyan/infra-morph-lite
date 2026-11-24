@@ -88,9 +88,28 @@ def terraform_label(*names: str) -> str:
     return "_".join(name.replace("-", "_") for name in names)
 
 
+def ref(resource_type: str, label: str, attribute: str = "id") -> Expression:
+    return Expression(f"{resource_type}.{label}.{attribute}")
+
+
+def resource_tags(spec: InfrastructureSpecification, name: str) -> dict[str, str]:
+    # The generator's tags win over spec tags with the same key.
+    tags = dict(spec.tags)
+    tags.update(
+        {
+            "Name": name,
+            "Environment": str(spec.environment),
+            "ManagedBy": "inframorph",
+        }
+    )
+    return dict(sorted(tags.items()))
+
+
 class ProviderAdapter(ABC):
     #: Template directory under generators/templates/ for this provider.
     template_dir: str
+    #: Whether terraform plan can run offline (mock credentials).
+    offline_plan: bool = True
 
     @abstractmethod
     def build_context(self, spec: InfrastructureSpecification) -> RenderContext:

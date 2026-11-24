@@ -9,7 +9,6 @@ from app.core.version import __version__
 from app.domain.enums import Provider
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandStatus
-from app.providers.registry import UnsupportedProviderError
 from app.services.generation import (
     GenerationResult,
     InfrastructureGenerationService,
@@ -40,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the full pipeline (validate, generate, terraform checks) on a spec file.",
     )
     from_spec.add_argument("spec", type=Path, help="Path to an IR spec JSON file.")
+    from_spec.add_argument(
+        "--provider",
+        choices=[p.value for p in Provider],
+        help="Optional check: fail unless the spec is for this provider.",
+    )
 
     interpret = commands.add_parser(
         "interpret",
@@ -90,7 +94,7 @@ def main() -> None:
         return
 
     if args.command == "generate-from-spec":
-        sys.exit(generate_from_spec(args.spec))
+        sys.exit(generate_from_spec(args.spec, args.provider))
 
     if args.command == "interpret":
         sys.exit(interpret(args.requirement, Provider(args.provider), args.generate))
@@ -122,7 +126,7 @@ def load_spec_file(path: Path) -> InfrastructureSpecification:
         raise ValueError("\n".join(lines)) from exc
 
 
-def generate_from_spec(path: Path) -> int:
+def generate_from_spec(path: Path, provider: str | None = None) -> int:
     """Run the full pipeline and print a report. Returns the process exit code."""
     try:
         spec = load_spec_file(path)
@@ -130,16 +134,21 @@ def generate_from_spec(path: Path) -> int:
         print(f"ERROR {exc}", file=sys.stderr)
         return 1
 
+    # A check only, never an override: the region in the spec belongs to its provider.
+    if provider is not None and provider != spec.provider:
+        print(
+            f"ERROR --provider {provider} does not match the spec's provider "
+            f"'{spec.provider}'",
+            file=sys.stderr,
+        )
+        return 1
+
     return run_pipeline(spec)
 
 
 def run_pipeline(spec: InfrastructureSpecification) -> int:
     """Run the full pipeline on a spec and print a report; returns the exit code."""
-    try:
-        result = InfrastructureGenerationService().run_pipeline(spec)
-    except UnsupportedProviderError as exc:
-        print(f"ERROR {exc}", file=sys.stderr)
-        return 1
+    result = InfrastructureGenerationService().run_pipeline(spec)
     return print_pipeline_report(result)
 
 

@@ -204,12 +204,12 @@ def test_first_init_saves_lock_file_to_shared_dir(runner, run_mock, run_dir, tmp
     result = runner.init(run_dir)
 
     assert result.status is CommandStatus.PASSED
-    assert (tmp_path / "shared" / ".terraform.lock.hcl").read_text(encoding="utf-8") == "lock v1"
+    assert (tmp_path / "shared" / "aws.terraform.lock.hcl").read_text(encoding="utf-8") == "lock v1"
 
 
 def test_saved_lock_file_is_copied_into_run_dir_before_init(runner, run_mock, run_dir, tmp_path):
     (tmp_path / "shared").mkdir()
-    (tmp_path / "shared" / ".terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
+    (tmp_path / "shared" / "aws.terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
     seen = {}
 
     def run(args, cwd, **_kwargs):
@@ -227,7 +227,7 @@ def test_failed_init_does_not_overwrite_saved_lock_and_gives_hint(
     runner, run_mock, run_dir, tmp_path
 ):
     (tmp_path / "shared").mkdir()
-    (tmp_path / "shared" / ".terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
+    (tmp_path / "shared" / "aws.terraform.lock.hcl").write_text("saved lock", encoding="utf-8")
     (run_dir / "marker").touch()
     run_mock.return_value = subprocess.CompletedProcess(
         args=[], returncode=1, stdout="", stderr="Error: locked provider mismatch"
@@ -238,7 +238,7 @@ def test_failed_init_does_not_overwrite_saved_lock_and_gives_hint(
     assert result.status is CommandStatus.FAILED
     assert result.stderr.startswith("Error: locked provider mismatch")
     assert "delete" in result.stderr and "saved lock file" in result.stderr
-    assert (tmp_path / "shared" / ".terraform.lock.hcl").read_text(encoding="utf-8") == "saved lock"
+    assert (tmp_path / "shared" / "aws.terraform.lock.hcl").read_text(encoding="utf-8") == "saved lock"
 
 
 def test_skipped_init_touches_no_lock_files(runner, run_mock, monkeypatch, run_dir, tmp_path):
@@ -247,7 +247,7 @@ def test_skipped_init_touches_no_lock_files(runner, run_mock, monkeypatch, run_d
     result = runner.init(run_dir)
 
     assert result.status is CommandStatus.SKIPPED
-    assert not (tmp_path / "shared" / ".terraform.lock.hcl").exists()
+    assert not (tmp_path / "shared" / "aws.terraform.lock.hcl").exists()
 
 
 def test_environment_is_not_in_the_result(runner, run_mock, monkeypatch, tmp_path):
@@ -275,3 +275,15 @@ def test_plan_summary_counts_like_terraform():
 
 def test_plan_summary_of_empty_plan():
     assert PlanSummary.from_show_json({"format_version": "1.2"}) == PlanSummary()
+
+
+def test_each_provider_keeps_its_own_saved_lock(runner, run_mock, run_dir, tmp_path):
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "aws.terraform.lock.hcl").write_text("aws lock", encoding="utf-8")
+    run_mock.side_effect = _init_writes_lock("azure lock")
+
+    runner.init(run_dir, "azure")
+
+    shared = tmp_path / "shared"
+    assert (shared / "aws.terraform.lock.hcl").read_text(encoding="utf-8") == "aws lock"
+    assert (shared / "azure.terraform.lock.hcl").read_text(encoding="utf-8") == "azure lock"

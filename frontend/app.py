@@ -14,7 +14,7 @@ import streamlit as st
 
 from api_client import ApiError, BackendUnreachable, InfraMorphClient
 
-# Demo prompts from docs/PROJECT_SPEC.md §41 (the AWS ones; Azure is Milestone 2).
+# Demo prompts from docs/PROJECT_SPEC.md §41 (the AWS ones).
 EXAMPLE_PROMPTS = {
     "Basic web server": "Create a basic AWS web server.",
     "VPC + public subnet + web server": (
@@ -185,12 +185,9 @@ st.text_area(
     height=100,
     placeholder="e.g. Create an AWS VPC with a public subnet and web server.",
 )
-provider_col, azure_col = st.columns(2)
-provider_col.radio("Cloud provider", ["AWS"], horizontal=True)
-azure_col.radio(
-    "Coming later", ["Azure (Milestone 2)"], index=None, disabled=True, horizontal=True
-)
-provider = "aws"
+provider = st.radio("Cloud provider", ["AWS", "Azure"], horizontal=True).lower()
+if provider == "azure":
+    st.caption("Azure: Terraform is generated and validated; plan needs an Azure login, so it is skipped.")
 
 # ---------------------------------------------------------------- 2. Specification
 st.header("2. Specification")

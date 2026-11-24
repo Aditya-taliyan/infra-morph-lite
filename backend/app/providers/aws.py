@@ -25,6 +25,8 @@ from app.providers.base import (
     RenderContext,
     TerraformResource,
     Variable,
+    ref,
+    resource_tags,
     terraform_label,
 )
 
@@ -54,10 +56,6 @@ _IP_PROTOCOLS: dict[Protocol, str] = {
 }
 
 _ANYWHERE = "0.0.0.0/0"
-
-
-def _ref(resource_type: str, label: str, attribute: str = "id") -> Expression:
-    return Expression(f"{resource_type}.{label}.{attribute}")
 
 
 class AWSProvider(ProviderAdapter):
@@ -100,16 +98,7 @@ class AWSProvider(ProviderAdapter):
     # --- shared -------------------------------------------------------------
 
     def _tags(self, name: str) -> dict[str, str]:
-        # The generator's tags win over spec tags with the same key.
-        tags = dict(self._spec.tags)
-        tags.update(
-            {
-                "Name": name,
-                "Environment": str(self._spec.environment),
-                "ManagedBy": "inframorph",
-            }
-        )
-        return dict(sorted(tags.items()))
+        return resource_tags(self._spec, name)
 
     # --- VirtualNetwork -----------------------------------------------------
 
@@ -133,7 +122,7 @@ class AWSProvider(ProviderAdapter):
                     "aws_subnet",
                     terraform_label(network.name, subnet.name),
                     {
-                        "vpc_id": _ref("aws_vpc", vpc),
+                        "vpc_id": ref("aws_vpc", vpc),
                         "cidr_block": subnet.cidr,
                         # Public IPs are decided per instance (public_ip).
                         "map_public_ip_on_launch": False,
@@ -152,7 +141,7 @@ class AWSProvider(ProviderAdapter):
                 "aws_internet_gateway",
                 vpc,
                 {
-                    "vpc_id": _ref("aws_vpc", vpc),
+                    "vpc_id": ref("aws_vpc", vpc),
                     "tags": self._tags(f"{network.name}-igw"),
                 },
             )
@@ -162,12 +151,12 @@ class AWSProvider(ProviderAdapter):
                 "aws_route_table",
                 route_table,
                 {
-                    "vpc_id": _ref("aws_vpc", vpc),
+                    "vpc_id": ref("aws_vpc", vpc),
                     "route": Block(
                         "route",
                         {
                             "cidr_block": _ANYWHERE,
-                            "gateway_id": _ref("aws_internet_gateway", vpc),
+                            "gateway_id": ref("aws_internet_gateway", vpc),
                         },
                     ),
                     "tags": self._tags(f"{network.name}-public"),
@@ -181,8 +170,8 @@ class AWSProvider(ProviderAdapter):
                     "aws_route_table_association",
                     label,
                     {
-                        "subnet_id": _ref("aws_subnet", label),
-                        "route_table_id": _ref("aws_route_table", route_table),
+                        "subnet_id": ref("aws_subnet", label),
+                        "route_table_id": ref("aws_route_table", route_table),
                     },
                 )
             )
@@ -190,13 +179,13 @@ class AWSProvider(ProviderAdapter):
 
     def _network_outputs(self, network: VirtualNetwork) -> list[Output]:
         vpc = terraform_label(network.name)
-        outputs = [Output(f"{vpc}_vpc_id", _ref("aws_vpc", vpc), f"ID of VPC {network.name}")]
+        outputs = [Output(f"{vpc}_vpc_id", ref("aws_vpc", vpc), f"ID of VPC {network.name}")]
         for subnet in network.subnets:
             label = terraform_label(network.name, subnet.name)
             outputs.append(
                 Output(
                     f"{label}_subnet_id",
-                    _ref("aws_subnet", label),
+                    ref("aws_subnet", label),
                     f"ID of subnet {network.name}.{subnet.name}",
                 )
             )
@@ -213,7 +202,7 @@ class AWSProvider(ProviderAdapter):
                 {
                     "name": group.name,
                     "description": f"Security group {group.name} (managed by InfraMorph)",
-                    "vpc_id": _ref("aws_vpc", terraform_label(group.network)),
+                    "vpc_id": ref("aws_vpc", terraform_label(group.network)),
                     "tags": self._tags(group.name),
                 },
             )
@@ -239,7 +228,7 @@ class AWSProvider(ProviderAdapter):
         inbound = rule.direction is Direction.INBOUND
         kind = "ingress" if inbound else "egress"
         attributes: dict[str, Any] = {
-            "security_group_id": _ref("aws_security_group", terraform_label(group.name)),
+            "security_group_id": ref("aws_security_group", terraform_label(group.name)),
             "ip_protocol": _IP_PROTOCOLS[rule.protocol],
             "cidr_ipv4": rule.cidr,
         }
@@ -289,11 +278,11 @@ class AWSProvider(ProviderAdapter):
         attributes: dict[str, Any] = {
             "ami": Expression(f'local.ubuntu_ami_ids["{self._spec.region}"]'),
             "instance_type": INSTANCE_TYPES[instance.size],
-            "subnet_id": _ref("aws_subnet", terraform_label(network_name, subnet_name)),
+            "subnet_id": ref("aws_subnet", terraform_label(network_name, subnet_name)),
         }
         if instance.security_groups:
             attributes["vpc_security_group_ids"] = [
-                _ref("aws_security_group", terraform_label(name))
+                ref("aws_security_group", terraform_label(name))
                 for name in instance.security_groups
             ]
         attributes["associate_public_ip_address"] = instance.public_ip
@@ -305,7 +294,7 @@ class AWSProvider(ProviderAdapter):
         outputs = [
             Output(
                 f"{label}_private_ip",
-                _ref("aws_instance", label, "private_ip"),
+                ref("aws_instance", label, "private_ip"),
                 f"Private IP of {instance.name}",
             )
         ]
@@ -313,7 +302,7 @@ class AWSProvider(ProviderAdapter):
             outputs.append(
                 Output(
                     f"{label}_public_ip",
-                    _ref("aws_instance", label, "public_ip"),
+                    ref("aws_instance", label, "public_ip"),
                     f"Public IP of {instance.name}",
                 )
             )
@@ -323,7 +312,7 @@ class AWSProvider(ProviderAdapter):
 
     def _bucket(self, bucket: StorageBucket) -> list[TerraformResource]:
         label = terraform_label(bucket.name)
-        bucket_id = _ref("aws_s3_bucket", label)
+        bucket_id = ref("aws_s3_bucket", label)
         block_public = not bucket.public_access
         return [
             TerraformResource(
@@ -362,7 +351,7 @@ class AWSProvider(ProviderAdapter):
         return [
             Output(
                 f"{label}_bucket_name",
-                _ref("aws_s3_bucket", label, "bucket"),
+                ref("aws_s3_bucket", label, "bucket"),
                 f"Name of bucket {bucket.name}",
             )
         ]

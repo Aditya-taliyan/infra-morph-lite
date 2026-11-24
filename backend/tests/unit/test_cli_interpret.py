@@ -70,11 +70,14 @@ def test_generate_runs_the_pipeline(monkeypatch, capsys, use_ollama, fake_pipeli
     assert "Plan: 11 to add" in out
 
 
-def test_generate_azure_reports_unsupported_provider(monkeypatch, capsys, use_ollama):
+def test_generate_azure_skips_plan(monkeypatch, capsys, use_ollama, fake_pipeline):  # noqa: F811
     use_ollama(REFUSED)
 
     code = _run(monkeypatch, "Create an Azure virtual network with a virtual machine",
                 "--provider", "azure", "--generate")
 
-    assert code == 1
-    assert "Azure Terraform generation is not available yet" in capsys.readouterr().err
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "PASSED   terraform validate" in out
+    assert "SKIPPED  terraform plan" in out
+    assert "Azure plan requires an Azure login; not run by design" in out

@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.models.errors import ErrorBody, ErrorResponse
-from app.providers.registry import UnsupportedProviderError
 from app.services.generation import PipelineBusyError
 
 logger = logging.getLogger(__name__)
@@ -59,10 +58,6 @@ async def _schema_error(_: Request, exc: RequestValidationError) -> JSONResponse
     )
 
 
-async def _unsupported_provider(_: Request, exc: UnsupportedProviderError) -> JSONResponse:
-    return error_response(400, "unsupported_provider", str(exc))
-
-
 async def _busy(_: Request, exc: PipelineBusyError) -> JSONResponse:
     return error_response(409, "generation_in_progress", str(exc))
 
@@ -82,7 +77,6 @@ async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, _api_error)
     app.add_exception_handler(RequestValidationError, _schema_error)
-    app.add_exception_handler(UnsupportedProviderError, _unsupported_provider)
     app.add_exception_handler(PipelineBusyError, _busy)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(Exception, _unexpected)

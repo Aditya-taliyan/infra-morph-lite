@@ -55,7 +55,7 @@ class FakeRunner:
             status=CommandStatus.FAILED if failed else CommandStatus.PASSED,
         )
 
-    def init(self, directory: Path) -> CommandResult:
+    def init(self, directory: Path, provider: str = "aws") -> CommandResult:
         self.started.set()
         if self.gate is not None:
             assert self.gate.wait(timeout=10), "test gate was never released"

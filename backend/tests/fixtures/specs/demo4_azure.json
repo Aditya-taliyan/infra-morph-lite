@@ -1,0 +1,56 @@
+{
+  "schema_version": "1",
+  "name": "vnet-web",
+  "provider": "azure",
+  "region": "centralindia",
+  "environment": "dev",
+  "tags": {
+    "Project": "inframorph-demo"
+  },
+  "resources": [
+    {
+      "kind": "VirtualNetwork",
+      "name": "main-vnet",
+      "cidr": "10.20.0.0/16",
+      "subnets": [
+        {
+          "name": "public-a",
+          "cidr": "10.20.1.0/24",
+          "public": true
+        }
+      ]
+    },
+    {
+      "kind": "SecurityGroup",
+      "name": "web-nsg",
+      "network": "main-vnet",
+      "rules": [
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 80,
+          "to_port": 80,
+          "cidr": "0.0.0.0/0",
+          "description": "HTTP"
+        },
+        {
+          "direction": "inbound",
+          "protocol": "tcp",
+          "from_port": 443,
+          "to_port": 443,
+          "cidr": "0.0.0.0/0",
+          "description": "HTTPS"
+        }
+      ]
+    },
+    {
+      "kind": "ComputeInstance",
+      "name": "web-server",
+      "size": "small",
+      "os": "ubuntu",
+      "subnet": "main-vnet.public-a",
+      "security_groups": ["web-nsg"],
+      "public_ip": true
+    }
+  ]
+}

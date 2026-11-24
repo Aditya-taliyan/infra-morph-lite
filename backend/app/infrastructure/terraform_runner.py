@@ -15,7 +15,8 @@ the AWS provider is installed there once and reused. A plugin cache alone is
 not enough on Windows: Terraform cannot symlink from the cache, so it copied
 the provider (hundreds of MB) into every run and antivirus scanned each copy.
 After the first successful init, the run's .terraform.lock.hcl is saved in
-the shared directory and copied into each new run directory before init, so
+the shared directory (one file per provider, e.g. aws.terraform.lock.hcl, so
+AWS and Azure runs do not overwrite each other's lock) and copied into each new run directory before init, so
 later inits only verify the installed provider against the lock instead of
 asking the registry. The .tf files and plan.tfplan stay in the run directory,
 so runs remain isolated.
@@ -58,15 +59,15 @@ class TerraformRunner:
         self.config = config
         self.shared_data_dir = shared_data_dir
 
-    @property
-    def shared_lock_file(self) -> Path:
-        return self.shared_data_dir / LOCK_FILE
+    def shared_lock_file(self, provider: str) -> Path:
+        return self.shared_data_dir / f"{provider}{LOCK_FILE}"
 
-    def init(self, directory: Path) -> CommandResult:
+    def init(self, directory: Path, provider: str = "aws") -> CommandResult:
         run_lock = directory / LOCK_FILE
-        seeded = self.shared_lock_file.is_file() and not run_lock.exists()
+        shared_lock = self.shared_lock_file(provider)
+        seeded = shared_lock.is_file() and not run_lock.exists()
         if seeded:
-            shutil.copyfile(self.shared_lock_file, run_lock)
+            shutil.copyfile(shared_lock, run_lock)
 
         result = self._run(
             "init",
@@ -78,12 +79,12 @@ class TerraformRunner:
         if result.status is CommandStatus.PASSED and run_lock.is_file():
             # Keep the shared copy current (it changes only if the provider
             # version in the templates changes).
-            shutil.copyfile(run_lock, self.shared_lock_file)
+            shutil.copyfile(run_lock, shared_lock)
         elif result.status is CommandStatus.FAILED and seeded:
             result = result.model_copy(
                 update={
                     "stderr": result.stderr
-                    + f"\nHint: init used the saved lock file {self.shared_lock_file}. "
+                    + f"\nHint: init used the saved lock file {shared_lock}. "
                     "If the provider version in the templates changed, delete "
                     f"{self.shared_data_dir} and run again."
                 }

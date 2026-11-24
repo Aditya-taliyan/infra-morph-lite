@@ -29,7 +29,8 @@ class FakeRunner:
         self.calls.append((name, directory))
         return _result(name, CommandStatus.FAILED if name == self.fail else self.status)
 
-    def init(self, directory):
+    def init(self, directory, provider="aws"):
+        self.init_provider = provider
         return self._step("init", directory)
 
     def fmt_check(self, directory):
@@ -107,3 +108,20 @@ def test_invalid_spec_creates_no_run_dir_and_runs_nothing(tmp_path: Path):
 def test_run_dirs_are_unique(tmp_path: Path):
     ids = {new_run_dir(tmp_path)[0] for _ in range(20)}
     assert len(ids) == 20
+
+
+def test_azure_pipeline_skips_plan_without_calling_runner(tmp_path: Path):
+    runner = FakeRunner()
+
+    result = InfrastructureGenerationService(runner).run_pipeline(
+        load_spec("demo4_azure"), generated_root=tmp_path
+    )
+
+    assert [name for name, _ in runner.calls] == ["init", "fmt", "validate"]
+    assert runner.init_provider == "azure"
+    plan = result.steps[-1]
+    assert plan.step == "terraform plan"
+    assert plan.status is CommandStatus.SKIPPED
+    assert plan.stderr == "Azure plan requires an Azure login; not run by design"
+    assert result.plan_summary is None
+    assert result.terraform_ok

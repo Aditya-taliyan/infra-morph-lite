@@ -19,6 +19,8 @@ from app.validators.semantic import validate
 # instead of queued, so an API client gets an immediate answer.
 _PIPELINE_LOCK = threading.Lock()
 
+AZURE_PLAN_SKIPPED = "Azure plan requires an Azure login; not run by design"
+
 
 class PipelineBusyError(RuntimeError):
     """Another run_pipeline call is still in progress."""
@@ -66,7 +68,8 @@ class GenerationResult:
 class InfrastructureGenerationService:
     """Semantic validation -> provider adapter -> Terraform generator.
 
-    run_pipeline continues with terraform init -> fmt check -> validate -> plan.
+    run_pipeline continues with terraform init -> fmt check -> validate -> plan
+    (plan is reported as skipped for providers that cannot plan offline: Azure).
     """
 
     def __init__(
@@ -97,10 +100,8 @@ class InfrastructureGenerationService:
     ) -> GenerationResult:
         """Generate into a fresh run directory, then check it with Terraform.
 
-        Raises UnsupportedProviderError (before any validation or file is
-        written) and PipelineBusyError (if another run is in progress).
+        Raises PipelineBusyError if another run is in progress.
         """
-        get_provider(spec.provider)
         if not _PIPELINE_LOCK.acquire(blocking=False):
             raise PipelineBusyError("another generation is in progress")
         try:
@@ -121,11 +122,27 @@ class InfrastructureGenerationService:
         result.run_id = run_id
         result.output_dir = run_dir
 
-        for check in (self.runner.init, self.runner.fmt_check, self.runner.validate):
-            step = check(run_dir)
-            result.steps.append(step)
+        checks = (
+            lambda: self.runner.init(run_dir, str(spec.provider)),
+            lambda: self.runner.fmt_check(run_dir),
+            lambda: self.runner.validate(run_dir),
+        )
+        for check in checks:
+            result.steps.append(check())
             if not result.terraform_ok:
                 return result
+
+        if not get_provider(spec.provider).offline_plan:
+            result.steps.append(
+                CommandResult(
+                    command=["terraform", "plan"],
+                    exit_code=None,
+                    stderr=AZURE_PLAN_SKIPPED,
+                    duration_seconds=0.0,
+                    status=CommandStatus.SKIPPED,
+                )
+            )
+            return result
 
         plan_steps, result.plan_summary = self.runner.plan(run_dir)
         result.steps.extend(plan_steps)

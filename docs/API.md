@@ -24,7 +24,6 @@ Every failure, whatever its status code, has this shape:
 
 | Status | `code` | When | `details` |
 |---|---|---|---|
-| 400 | `unsupported_provider` | `/generate` with `provider: "azure"` (Milestone 2) | `null` |
 | 404 | `not_found` | Unknown path | `null` |
 | 405 | `method_not_allowed` | Wrong method on a known path | `null` |
 | 409 | `generation_in_progress` | `/generate` while another generation is running (one at a time) | `null` |
@@ -240,14 +239,6 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/generate `
       }
     }
   }
-  ```
-
-- 400 `unsupported_provider`:
-
-  ```json
-  { "error": { "code": "unsupported_provider",
-               "message": "Azure Terraform generation is not available yet; it is coming in Milestone 2",
-               "details": null } }
   ```
 
 - 409 `generation_in_progress`:

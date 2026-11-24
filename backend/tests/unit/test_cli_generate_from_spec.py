@@ -103,3 +103,9 @@ def test_semantic_errors_exit_1(monkeypatch, capsys, tmp_path: Path, fake_pipeli
     assert _run(monkeypatch, str(bad)) == 1
     assert "ERROR E02" in capsys.readouterr().err
     assert fake_pipeline.calls == []
+
+
+def test_provider_flag_must_match_spec(monkeypatch, capsys, fake_pipeline):
+    assert _run(monkeypatch, str(DEMO2), "--provider", "azure") == 1
+    assert "does not match the spec's provider 'aws'" in capsys.readouterr().err
+    assert fake_pipeline.calls == []

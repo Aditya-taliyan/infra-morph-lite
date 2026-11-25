@@ -30,7 +30,7 @@ Every failure, whatever its status code, has this shape:
 | 413 | `request_too_large` | Request body over 100,000 bytes (`API_MAX_BODY_BYTES`) | `null` |
 | 422 | `schema_validation_failed` | Body does not match the request schema (missing/unknown fields, bad enum, > 50 resources, requirement > 2,000 chars, …) | list of `{ "field", "message" }` |
 | 422 | `semantic_validation_failed` | `/generate` with a spec that has semantic errors; Terraform is not run | `{ "issues": [ValidationIssue, …] }` |
-| 422 | `interpretation_failed` | `/specifications` could not produce a valid spec | `{ "interpreter", "fallback_reason", "errors", "notes" }` |
+| 422 | `interpretation_failed` | `/specifications` could not produce a valid spec | `{ "interpreter", "fallback_reason", "errors", "notes", "unsupported_requests" }` |
 | 500 | `internal_error` | Unexpected server error. The traceback is logged, never returned | `null` |
 
 A `ValidationIssue` is `{ "code": "E02", "severity": "error" | "warning", "message": "…", "resource_name": "web-server" | null }`.
@@ -90,13 +90,15 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/specifications `
   },
   "validation": { "is_valid": true, "errors": [], "warnings": [] },
   "fallback_reason": null,
-  "notes": []
+  "notes": [],
+  "unsupported_requests": []
 }
 ```
 
 - `interpreter` is `"ollama"` or `"rule-based"`. `attempts` counts model calls (always 1 for rule-based).
 - `fallback_reason` is set when the rule-based interpreter produced the spec, e.g. `"ollama is unavailable (attempt 1: cannot reach Ollama at http://127.0.0.1:11434: …)"`.
 - `notes` lists things the user should know, e.g. `"Left out (not supported): databases."`.
+- `unsupported_requests` lists requested services that are not supported and were left out, e.g. `["load balancer"]`. If nothing else was requested, the answer is 422 `interpretation_failed` with `interpreter` `"scope-check"`; no LLM call is made.
 - The returned spec has no semantic errors; it may have warnings.
 
 **Errors:** 422 `schema_validation_failed` (empty or too-long requirement, bad provider, unknown field); 422 `interpretation_failed`; 413; 500.
@@ -113,7 +115,8 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/specifications `
         "ollama: attempt 1: cannot reach Ollama at http://127.0.0.1:11434: …",
         "rule-based: No supported infrastructure found in the requirement. The rule-based interpreter understands …"
       ],
-      "notes": []
+      "notes": [],
+      "unsupported_requests": []
     }
   }
 }

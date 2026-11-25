@@ -34,6 +34,7 @@ def interpret_requirement(
                 "fallback_reason": result.fallback_reason,
                 "errors": result.errors,
                 "notes": result.final.notes,
+                "unsupported_requests": result.final.unsupported_requests,
             },
         )
     return InterpretResponse.from_result(result)

@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -45,7 +46,9 @@ class NoFallback(SpecInterpreter):
 
     name = "none"
 
-    def interpret(self, requirement: str, provider: Provider) -> InterpretationResult:
+    def interpret(
+        self, requirement: str, provider: Provider, unsupported: Sequence[str] = ()
+    ) -> InterpretationResult:
         return InterpretationResult(self.name, InterpretationStatus.FAILED)
 
 

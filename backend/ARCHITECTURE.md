@@ -100,10 +100,11 @@ The terraform runner (`infrastructure/terraform_runner.py`) enforces the safety 
 
 ## 6. Interpretation (`services/spec_engine.py`, `interpreters/`)
 
-- `SpecInterpreter.interpret(requirement, provider) -> InterpretationResult` never raises for bad input. It reports `success`, `unavailable` or `failed`, with errors and notes.
+- `SpecInterpreter.interpret(requirement, provider, unsupported=()) -> InterpretationResult` never raises for bad input. It reports `success`, `unavailable` or `failed`, with errors and notes.
 - `check_candidate(data, provider)` is the only way a candidate becomes a spec. It forces the user's provider, then runs Pydantic, the resource limit and semantic validation. Warnings pass; errors fail.
-- **OllamaInterpreter**: fixed system prompt; user text inside `<requirement>` with injected tags removed; the IR's JSON schema passed as Ollama's `format`; `temperature 0`; up to 3 attempts, each retry sending back up to 15 validator errors.
+- **OllamaInterpreter**: fixed system prompt plus the names of unsupported services to leave out; user text inside `<requirement>` with injected tags removed; the IR's JSON schema passed as Ollama's `format`; `temperature 0`; up to 3 attempts, each retry sending back up to 15 validator errors.
 - **RuleBasedInterpreter**: keywords and regexes → fixed templates. It is deterministic, uses secure defaults (SSH only from inside the network unless a source or "anywhere" is stated), and lists unsupported requests (databases, k8s, …) in `notes`.
+- **Scope check** (`scope.py`): keyword detection of unsupported services. A requirement that asks only for those fails without any interpreter running; otherwise the list is returned as `unsupported_requests`.
 - **SpecEngine**: tries Ollama first. If Ollama is *unavailable*, or *failed* after all attempts, it runs the rule-based interpreter and records `fallback_reason`.
 
 ## 7. Design decisions and why

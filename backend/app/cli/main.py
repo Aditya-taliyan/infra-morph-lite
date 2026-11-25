@@ -180,6 +180,9 @@ def interpret(requirement: str, provider: Provider, generate: bool) -> int:
     final = result.final
     if result.fallback_reason:
         print(f"Fallback: {result.fallback_reason}", file=sys.stderr)
+    if final.unsupported_requests:
+        print(f"Not supported yet, left out: {', '.join(final.unsupported_requests)}",
+              file=sys.stderr)
     for note in final.notes:
         print(f"NOTE {note}", file=sys.stderr)
 

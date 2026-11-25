@@ -1,6 +1,8 @@
 import json
 import logging
 
+import pytest
+
 from app.interpreters.base import InterpretationStatus
 from app.interpreters.ollama_interpreter import SYSTEM_PROMPT
 from tests.helpers import resource
@@ -172,3 +174,37 @@ def test_code_fence_around_json_is_tolerated():
     fenced = "```json\n" + json.dumps(json.loads(demo_json("demo1"))) + "\n```"
 
     assert FakeOllama(fenced).interpreter().interpret(REQUIREMENT, AWS).ok
+
+
+@pytest.mark.parametrize("name, hint", [
+    ("user-uploads", "use 'useruploads' instead"),
+    ("a-very-long-bucket-name-for-uploads", "use 'averylongbucketnameforup' instead"),
+    ("a-b", None),  # "ab" would be rejected too
+])
+def test_e09_retry_suggests_a_valid_bucket_name(name, hint):
+    def rename(data):
+        data["resources"].append({"kind": "StorageBucket", "name": name})
+
+    fake = FakeOllama(demo_json("demo1", rename), demo_json("demo1"))
+
+    result = fake.interpreter().interpret(REQUIREMENT, AWS)
+
+    retry = fake.messages(1)[-1]["content"]
+    assert f"E09: Bucket name '{name}' is not allowed" in retry
+    if hint:
+        assert hint in retry
+    else:
+        assert "use '" not in retry
+    # The recorded, user-facing error has no suggestion.
+    assert len(result.errors) == 1
+    assert result.errors[0].endswith("because Azure storage accounts require it")
+
+
+def test_system_prompt_has_the_secure_default_example():
+    text = " ".join(SYSTEM_PROMPT.split())
+    assert (
+        "A web server gets ports 80 and 443 from 0.0.0.0/0. SSH (22) is allowed only from the "
+        "network's own CIDR, never from 0.0.0.0/0, unless the user literally asks for SSH from "
+        "anywhere. A server that is not a web server gets no inbound rule from 0.0.0.0/0 at all "
+        "unless the requirement literally asks for it."
+    ) in text

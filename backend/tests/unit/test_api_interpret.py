@@ -90,3 +90,25 @@ def test_bad_request_body_is_rejected(use_ollama, body):
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "schema_validation_failed"
     assert fake.requests == []
+
+
+def test_unsupported_requests_are_returned(use_ollama):
+    use_ollama(demo_json("demo1"))
+
+    response = client.post(
+        URL, json={"requirement": "a web server and a redis cache", "provider": "aws"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["unsupported_requests"] == ["cache", "redis"]
+
+
+def test_only_unsupported_is_422_with_the_list(use_ollama):
+    fake = use_ollama()
+
+    response = client.post(URL, json={"requirement": "an RDS database", "provider": "aws"})
+
+    assert response.status_code == 422
+    details = response.json()["error"]["details"]
+    assert details["unsupported_requests"] == ["database", "rds"]
+    assert fake.requests == []

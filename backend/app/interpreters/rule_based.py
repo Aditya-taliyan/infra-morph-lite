@@ -13,6 +13,7 @@ failure. Its output goes through check_candidate like the LLM's.
 import hashlib
 import ipaddress
 import re
+from collections.abc import Sequence
 
 from app.domain.enums import Provider
 from app.interpreters.base import (
@@ -103,7 +104,10 @@ def _tcp(port: int, cidr: str, description: str) -> dict:
 class RuleBasedInterpreter(SpecInterpreter):
     name = "rule-based"
 
-    def interpret(self, requirement: str, provider: Provider) -> InterpretationResult:
+    def interpret(
+        self, requirement: str, provider: Provider, unsupported: Sequence[str] = ()
+    ) -> InterpretationResult:
+        # `unsupported` is not needed: this parser only ever builds the four kinds it knows.
         text = " ".join(requirement.lower().split())
         notes: list[str] = []
         result = InterpretationResult(self.name, InterpretationStatus.FAILED, attempts=1)

@@ -8,6 +8,7 @@ returned, so no interpreter can hand a half-valid spec to the generator.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -42,6 +43,8 @@ class InterpretationResult:
     errors: list[str] = field(default_factory=list)
     # Things the user should know that are not errors (e.g. ignored requests).
     notes: list[str] = field(default_factory=list)
+    # Requested services that are not supported and were left out (scope.py).
+    unsupported_requests: list[str] = field(default_factory=list)
     # The last raw model output, for debugging only.
     raw_output: str | None = None
 
@@ -54,8 +57,13 @@ class SpecInterpreter(ABC):
     name: str
 
     @abstractmethod
-    def interpret(self, requirement: str, provider: Provider) -> InterpretationResult:
-        """Never raises for bad input or bad model output; reports it in the result."""
+    def interpret(
+        self, requirement: str, provider: Provider, unsupported: Sequence[str] = ()
+    ) -> InterpretationResult:
+        """Never raises for bad input or bad model output; reports it in the result.
+
+        `unsupported` names the requested services to leave out (see scope.py).
+        """
 
 
 @dataclass

@@ -81,3 +81,11 @@ def test_generate_azure_skips_plan(monkeypatch, capsys, use_ollama, fake_pipelin
     assert "PASSED   terraform validate" in out
     assert "SKIPPED  terraform plan" in out
     assert "Azure plan requires an Azure login; not run by design" in out
+
+
+def test_unsupported_services_are_shown(monkeypatch, capsys, use_ollama):
+    use_ollama()
+
+    assert _run(monkeypatch, "an RDS database") == 1
+
+    assert "Not supported yet, left out: database, rds" in capsys.readouterr().err

@@ -5,6 +5,9 @@ output still fails validation after all its attempts, the rule-based
 interpreter runs instead and the reason is recorded. The result always says
 which interpreter produced the spec. Generation is a separate step, so the
 user reviews the spec before any Terraform is made (human in the loop).
+
+A requirement that asks only for unsupported services (scope.py) fails
+before any interpreter runs.
 """
 
 import logging
@@ -14,6 +17,7 @@ from app.domain.enums import Provider
 from app.interpreters.base import InterpretationResult, InterpretationStatus, SpecInterpreter
 from app.interpreters.ollama_interpreter import OllamaInterpreter
 from app.interpreters.rule_based import RuleBasedInterpreter
+from app.interpreters.scope import has_supported, unsupported_requests
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +55,18 @@ class SpecEngine:
     def interpret(self, requirement: str, provider: Provider) -> SpecEngineResult:
         # Length only: the requirement itself is never logged at INFO.
         logger.info("Interpreting a %d-character requirement for %s", len(requirement), provider)
-        primary = self.primary.interpret(requirement, provider)
+        unsupported = unsupported_requests(requirement)
+        if unsupported and not has_supported(requirement):
+            logger.info("Only unsupported services requested: %s", ", ".join(unsupported))
+            return SpecEngineResult(final=InterpretationResult(
+                "scope-check",
+                InterpretationStatus.FAILED,
+                errors=[f"Only unsupported services were requested: {', '.join(unsupported)}."],
+                unsupported_requests=unsupported,
+            ))
+
+        primary = self.primary.interpret(requirement, provider, unsupported)
+        primary.unsupported_requests = unsupported
         if primary.ok:
             return SpecEngineResult(final=primary)
 
@@ -64,5 +79,6 @@ class SpecEngine:
                 f"{primary.attempts} attempts"
             )
         logger.info("Falling back to %s: %s", self.fallback.name, reason)
-        final = self.fallback.interpret(requirement, provider)
+        final = self.fallback.interpret(requirement, provider, unsupported)
+        final.unsupported_requests = unsupported
         return SpecEngineResult(final=final, fallback_reason=reason, primary=primary)

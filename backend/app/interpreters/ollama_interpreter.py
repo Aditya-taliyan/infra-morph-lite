@@ -6,7 +6,8 @@ validation (check_candidate). On failure the exact errors are sent back and
 the model gets another try, up to MAX_ATTEMPTS in total. After that the
 result is a structured failure; a half-valid spec is never returned.
 
-Prompt injection (§35): the system prompt is fixed text. The user's text
+Prompt injection (§35): the system prompt is fixed text, plus fixed service names from
+scope.py when unsupported services are requested. The user's text
 only ever appears inside a <requirement> block in the user message, and
 any copy of those tags inside the text is removed, so it cannot close the
 block early. Whatever the text says, the result is still validated, and
@@ -16,11 +17,13 @@ insecure rules still produce warnings.
 import json
 import logging
 import re
+from collections.abc import Sequence
 
 from app.domain.enums import Provider
 from app.domain.spec import InfrastructureSpecification
 from app.infrastructure.ollama_client import OllamaClient, OllamaError
 from app.interpreters.base import (
+    CandidateCheck,
     InterpretationResult,
     InterpretationStatus,
     SpecInterpreter,
@@ -83,6 +86,11 @@ Secure defaults:
 - Do not allow SSH (port 22) or all ports from 0.0.0.0/0 unless the
   requirement explicitly asks for exactly that. For a web server allow only
   HTTP (80) and HTTPS (443) from 0.0.0.0/0.
+- Example: A web server gets ports 80 and 443 from 0.0.0.0/0. SSH (22) is
+  allowed only from the network's own CIDR, never from 0.0.0.0/0, unless the
+  user literally asks for SSH from anywhere. A server that is not a web server
+  gets no inbound rule from 0.0.0.0/0 at all unless the requirement literally
+  asks for it.
 - Buckets are private (public_access false) unless explicitly asked otherwise.
 - Bucket versioning is false unless asked for.
 - Default size is "small".
@@ -104,6 +112,15 @@ Example for "a basic web server" on aws:
 """
 
 
+def build_system_prompt(unsupported: Sequence[str]) -> str:
+    if not unsupported:
+        return SYSTEM_PROMPT
+    return (
+        f"{SYSTEM_PROMPT}\nThese requested services are unsupported: {', '.join(unsupported)}. "
+        "Leave them out entirely. Never replace them with a different resource kind.\n"
+    )
+
+
 def build_user_message(requirement: str, provider: Provider) -> str:
     regions = ", ".join(sorted(ALLOWED_REGIONS[provider]))
     # Remove any <requirement> / </requirement> the user typed, so the
@@ -115,6 +132,21 @@ def build_user_message(requirement: str, provider: Provider) -> str:
         f"(use {_DEFAULT_REGION[provider]} unless the requirement names another)\n\n"
         f"<requirement>\n{text}\n</requirement>"
     )
+
+
+def feedback_errors(check: CandidateCheck) -> list[str]:
+    """check.errors plus a concrete fix for E09; for the model, not the user."""
+    if check.validation is None:
+        return check.errors
+    lines = []
+    for issue in check.validation.errors:
+        line = f"{issue.code}: {issue.message}"
+        if issue.code == "E09":
+            fixed = re.sub(r"[^a-z0-9]", "", issue.resource_name.lower())[:24]
+            if len(fixed) >= 3:  # a shorter name would be rejected again
+                line += f"; use '{fixed}' instead"
+        lines.append(line)
+    return lines
 
 
 def build_retry_message(errors: list[str]) -> str:
@@ -140,9 +172,11 @@ class OllamaInterpreter(SpecInterpreter):
         self.max_attempts = max_attempts
         self.schema = InfrastructureSpecification.model_json_schema()
 
-    def interpret(self, requirement: str, provider: Provider) -> InterpretationResult:
+    def interpret(
+        self, requirement: str, provider: Provider, unsupported: Sequence[str] = ()
+    ) -> InterpretationResult:
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": build_system_prompt(unsupported)},
             {"role": "user", "content": build_user_message(requirement, provider)},
         ]
         result = InterpretationResult(self.name, InterpretationStatus.FAILED)
@@ -164,6 +198,7 @@ class OllamaInterpreter(SpecInterpreter):
                 check = check_candidate(parse_json(raw), provider)
             except json.JSONDecodeError as exc:
                 problems = [f"the output is not valid JSON: {exc}"]
+                feedback = problems
             else:
                 if check.spec is not None:
                     logger.info("Ollama produced a valid spec on attempt %d", attempt)
@@ -172,12 +207,13 @@ class OllamaInterpreter(SpecInterpreter):
                     result.validation = check.validation
                     return result
                 problems = check.errors
+                feedback = feedback_errors(check)
 
             logger.info(
                 "Ollama output rejected on attempt %d (%d errors)", attempt, len(problems)
             )
             result.errors.extend(f"attempt {attempt}: {p}" for p in problems)
             messages.append({"role": "assistant", "content": raw})
-            messages.append({"role": "user", "content": build_retry_message(problems)})
+            messages.append({"role": "user", "content": build_retry_message(feedback)})
 
         return result

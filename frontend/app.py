@@ -89,6 +89,7 @@ def show_api_error(exc: ApiError) -> None:
         # Interpretation failed: what each interpreter got wrong.
         if details.get("fallback_reason"):
             st.caption(f"Fallback reason: {details['fallback_reason']}")
+        show_unsupported(details.get("unsupported_requests") or [])
         for error in details["errors"]:
             st.markdown(f"- {error}")
         for note in details.get("notes") or []:
@@ -96,6 +97,11 @@ def show_api_error(exc: ApiError) -> None:
     else:
         with st.expander("Details"):
             st.json(details)
+
+
+def show_unsupported(services: list[str]) -> None:
+    if services:
+        st.warning(f"Not supported yet, left out: {', '.join(services)}")
 
 
 def show_issues(errors: list[dict], warnings: list[dict]) -> None:
@@ -226,6 +232,7 @@ else:
     )
     if interpretation["fallback_reason"]:
         st.info(f"Rule-based fallback used: {interpretation['fallback_reason']}")
+    show_unsupported(interpretation["unsupported_requests"])
     for note in interpretation["notes"]:
         st.caption(note)
     show_validation(interpretation["validation"])

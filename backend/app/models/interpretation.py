@@ -26,6 +26,8 @@ class InterpretResponse(BaseModel):
     # Set when the rule-based fallback produced the spec.
     fallback_reason: str | None
     notes: list[str]
+    # Requested services that are not supported and were left out.
+    unsupported_requests: list[str]
 
     @classmethod
     def from_result(cls, result: SpecEngineResult) -> "InterpretResponse":
@@ -37,4 +39,5 @@ class InterpretResponse(BaseModel):
             validation=ValidationResponse.from_result(final.validation),
             fallback_reason=result.fallback_reason,
             notes=final.notes,
+            unsupported_requests=final.unsupported_requests,
         )

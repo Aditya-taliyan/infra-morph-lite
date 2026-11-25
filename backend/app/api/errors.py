@@ -1,8 +1,8 @@
 """Map every failure to {"error": {"code", "message", "details"}}.
 
 Domain exceptions are translated here, so route handlers stay free of
-try/except. Unexpected exceptions are logged with their traceback and
-answered with a generic 500; the traceback never reaches the client.
+try/except. Unexpected exceptions are logged with their stack frames (no
+message: it can quote user input) and answered with a generic 500; the traceback never reaches the client.
 """
 
 import logging
@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.logging import record_request, safe_traceback
 from app.models.errors import ErrorBody, ErrorResponse
 from app.services.approval import AlreadyApprovedError, RunNotApprovableError, RunNotFoundError
 from app.services.generation import PipelineBusyError
@@ -32,6 +33,7 @@ class ApiError(Exception):
 
 
 def error_response(status_code: int, code: str, message: str, details: Any = None) -> JSONResponse:
+    record_request(error_type=code)
     body = ErrorResponse(error=ErrorBody(code=code, message=message, details=details))
     return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
@@ -83,10 +85,13 @@ async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
 
 
 async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return error_response(
+    request_id = getattr(request.state, "request_id", "")
+    logger.error("Unhandled error in request %s\n%s", request_id, safe_traceback(exc))
+    response = error_response(
         500, "internal_error", "An unexpected error occurred. See the server log."
     )
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 def install_error_handlers(app: FastAPI) -> None:

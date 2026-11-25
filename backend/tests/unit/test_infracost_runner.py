@@ -128,7 +128,8 @@ def test_key_never_in_logs_or_result(runner, run_mock, caplog, tmp_path, returnc
 
     result = runner.estimate(tmp_path)
 
-    assert "invalid key ***" in caplog.text  # stderr was logged, masked
+    assert f"exit code {returncode}" in caplog.text
+    assert "invalid key" not in caplog.text  # stderr is never logged
     assert KEY not in caplog.text
     assert KEY not in result.model_dump_json()
     assert KEY not in repr(runner.config)

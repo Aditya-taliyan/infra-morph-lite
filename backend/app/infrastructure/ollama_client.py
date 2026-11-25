@@ -5,7 +5,7 @@ constrain the model's output to that structure; temperature 0 makes the
 answer repeatable. The schema only shapes the output: the caller still
 validates everything the model returns.
 
-Prompts and answers are logged at DEBUG only, never at INFO.
+Prompts and answers are never logged, only their sizes.
 """
 
 import logging
@@ -53,7 +53,7 @@ class OllamaClient:
             "format": schema,
             "options": {"temperature": 0},
         }
-        logger.debug("Ollama request to %s: %s", self.model, messages)
+        logger.debug("Ollama request to %s: %d messages", self.model, len(messages))
         try:
             with httpx.Client(timeout=self.timeout_seconds, transport=self.transport) as client:
                 response = client.post(f"{self.base_url}/api/chat", json=body)
@@ -74,7 +74,7 @@ class OllamaClient:
             raise OllamaError("Ollama returned a response without message.content") from exc
         if not isinstance(content, str):
             raise OllamaError("Ollama returned a non-text message.content")
-        logger.debug("Ollama answer: %s", content)
+        logger.debug("Ollama answer: %d characters", len(content))
         return content
 
 

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_spec_engine
 from app.api.errors import ApiError
+from app.core.logging import record_request
 from app.models.errors import ErrorResponse
 from app.models.interpretation import InterpretRequest, InterpretResponse
 from app.models.specifications import SpecificationRequest, ValidationResponse
@@ -43,4 +44,10 @@ def interpret_requirement(
 @router.post("/validate", responses={422: {"model": ErrorResponse}})
 def validate_specification(spec: SpecificationRequest) -> ValidationResponse:
     """Semantic validation only; never runs Terraform."""
-    return ValidationResponse.from_result(validate(spec))
+    result = validate(spec)
+    record_request(
+        provider=str(spec.provider),
+        resource_count=len(spec.resources),
+        validation_status="valid" if result.is_valid else "invalid",
+    )
+    return ValidationResponse.from_result(result)

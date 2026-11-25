@@ -13,6 +13,7 @@ before any interpreter runs.
 import logging
 from dataclasses import dataclass
 
+from app.core.logging import record_request
 from app.domain.enums import Provider
 from app.interpreters.base import InterpretationResult, InterpretationStatus, SpecInterpreter
 from app.interpreters.ollama_interpreter import OllamaInterpreter
@@ -53,7 +54,16 @@ class SpecEngine:
         self.fallback = fallback or RuleBasedInterpreter()
 
     def interpret(self, requirement: str, provider: Provider) -> SpecEngineResult:
-        # Length only: the requirement itself is never logged at INFO.
+        record_request(provider=str(provider))
+        result = self._interpret(requirement, provider)
+        record_request(
+            resource_count=len(result.final.spec.resources) if result.ok else None,
+            validation_status="valid" if result.ok else "invalid",
+        )
+        return result
+
+    def _interpret(self, requirement: str, provider: Provider) -> SpecEngineResult:
+        # Length only: the requirement itself is never logged.
         logger.info("Interpreting a %d-character requirement for %s", len(requirement), provider)
         unsupported = unsupported_requests(requirement)
         if unsupported and not has_supported(requirement):
@@ -78,7 +88,8 @@ class SpecEngine:
                 f"{primary.interpreter} output failed validation after "
                 f"{primary.attempts} attempts"
             )
-        logger.info("Falling back to %s: %s", self.fallback.name, reason)
+        # Not the reason: it can hold Ollama's error text.
+        logger.info("Falling back to %s: %s", self.fallback.name, primary.status)
         final = self.fallback.interpret(requirement, provider, unsupported)
         final.unsupported_requests = unsupported
         return SpecEngineResult(final=final, fallback_reason=reason, primary=primary)

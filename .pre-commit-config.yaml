@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: check-secrets
+        name: check tracked files for secrets
+        entry: python backend/scripts/check_secrets.py
+        language: system
+        pass_filenames: false
+        always_run: true

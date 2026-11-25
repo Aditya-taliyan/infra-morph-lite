@@ -31,7 +31,7 @@ Every failure, whatever its status code, has this shape:
 | 422 | `schema_validation_failed` | Body does not match the request schema (missing/unknown fields, bad enum, > 50 resources, requirement > 2,000 chars, …) | list of `{ "field", "message" }` |
 | 422 | `semantic_validation_failed` | `/generate` with a spec that has semantic errors; Terraform is not run | `{ "issues": [ValidationIssue, …] }` |
 | 422 | `interpretation_failed` | `/specifications` could not produce a valid spec | `{ "interpreter", "fallback_reason", "errors", "notes", "unsupported_requests" }` |
-| 500 | `internal_error` | Unexpected server error. The traceback is logged, never returned | `null` |
+| 500 | `internal_error` | Unexpected server error. The stack frames and request id are logged, never the exception message | `null` |
 
 A `ValidationIssue` is `{ "code": "E02", "severity": "error" | "warning", "message": "…", "resource_name": "web-server" | null }`.
 The codes are E01–E11 (errors) and W01–W06 (warnings), listed in [IR_SCHEMA.md §5](IR_SCHEMA.md#5-semantic-validation).

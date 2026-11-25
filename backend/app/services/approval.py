@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.config import GENERATED_DIR
+from app.core.logging import record_request
 from app.domain.approval import ApprovalRecord, files_hash, spec_hash
 from app.domain.enums import Provider
 from app.domain.terraform import CommandStatus, PlanSummary
@@ -50,6 +51,7 @@ class ApprovalService:
             raise RunNotFoundError(f"no generated run with id {run_id!r}")
         run = read_run_record(run_dir)
         provider = Provider(run["provider"])
+        record_request(provider=str(provider), resource_count=len(run["spec"]["resources"]))
         _check_steps(provider, {s["step"]: s["status"] for s in run["steps"]})
 
         current_files_hash = files_hash(read_tf_files(run_dir))

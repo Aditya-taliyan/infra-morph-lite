@@ -188,7 +188,8 @@ class OllamaInterpreter(SpecInterpreter):
             except OllamaError as exc:
                 # Unreachable, timed out, or e.g. model not pulled: the caller
                 # can fall back to another interpreter.
-                logger.info("Ollama unavailable on attempt %d: %s", attempt, exc)
+                # Type only: Ollama's error text could quote the prompt.
+                logger.info("%s on attempt %d", type(exc).__name__, attempt)
                 result.status = InterpretationStatus.UNAVAILABLE
                 result.errors.append(f"attempt {attempt}: {exc}")
                 return result

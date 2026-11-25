@@ -2,7 +2,7 @@
 
 Every failure gives status "unavailable" with a fixed reason: never an
 exception, never a guessed number. Infracost's own output is not shown to the
-user because it could echo the API key; stderr is logged with the key masked.
+user or logged: it could echo the API key or quote the generated Terraform.
 Infracost parses the .tf files itself and needs no cloud login, but it sends
 resource types and pricing attributes to the Infracost pricing API.
 """
@@ -77,12 +77,11 @@ class InfracostRunner:
             timeout=timeout,
         )
         logger.info(
-            "%s %s: exit code %s in %.2f s; stderr: %s",
+            "%s %s: exit code %s in %.2f s",
             executable,
             subcommand,
             completed.returncode,
             time.monotonic() - start,
-            (completed.stderr or "").replace(key, "***"),
         )
         return completed
 

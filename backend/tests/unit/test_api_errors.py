@@ -63,8 +63,10 @@ def test_unexpected_exception_returns_500_without_traceback(tmp_path: Path, capl
     }
     assert "secret internal detail" not in response.text
     assert "Traceback" not in response.text
-    # ...but it is in the server log.
-    assert "secret internal detail" in caplog.text
+    # The log says what and where, but not the message: it can quote user input.
+    assert "RuntimeError" in caplog.text and "generation.py" in caplog.text
+    assert "secret internal detail" not in caplog.text
+    assert response.headers["X-Request-ID"] in caplog.text
 
 
 def test_oversize_body_rejected_by_content_length(tmp_path: Path):

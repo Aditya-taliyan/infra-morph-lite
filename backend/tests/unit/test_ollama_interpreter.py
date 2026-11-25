@@ -159,13 +159,13 @@ def test_prompt_injection_output_with_errors_never_reaches_a_spec():
     assert any("E06" in e for e in result.errors)
 
 
-def test_requirement_is_not_logged_at_info(caplog):
+def test_requirement_is_never_logged(caplog):
     secret_looking = "web server for project zebra-unicorn-42"
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         FakeOllama("nope", demo_json("demo1")).interpreter().interpret(secret_looking, AWS)
 
-    assert caplog.records, "expected INFO log lines"
+    assert caplog.records, "expected log lines"
     assert all("zebra-unicorn-42" not in r.getMessage() for r in caplog.records)
     assert all(SYSTEM_PROMPT[:40] not in r.getMessage() for r in caplog.records)
 

@@ -249,6 +249,8 @@ python backend\scripts\run_demos.py --rule-based  # same, rule-based interpreter
 
 ## Security
 
+The threat model, with the test that proves each control, is in [SECURITY.md](SECURITY.md).
+
 - **LLM output is untrusted.** Every candidate spec goes through the same JSON parse → Pydantic (`extra="forbid"`) → semantic validation as a hand-written one (`interpreters/base.py: check_candidate`). A spec with errors is never returned. The provider chosen by the user always overrides the model's choice.
 - **Prompt-injection delimiting.** The system prompt is fixed. User text only appears inside a `<requirement>` block, and any `<requirement>` tags typed by the user are removed so the block can't be closed early. Whatever the text says, the result is validated, and insecure rules still raise warnings.
 - **Insecure settings are flagged.** Warnings cover SSH/RDP/all ports open to `0.0.0.0/0`, public buckets, instances without a security group, and prod buckets without versioning.
@@ -259,8 +261,25 @@ python backend\scripts\run_demos.py --rule-based  # same, rule-based interpreter
 - **Cloud credentials stripped.** Every `AWS_*`, `ARM_*`, `AZURE_*` and `INFRACOST_*` variable is removed from Terraform's environment, so real credentials on the machine can never be used.
 - **Mock provider credentials.** The generated provider block uses `access_key = "mock"` plus `skip_credentials_validation`, `skip_requesting_account_id` and `skip_metadata_api_check`, and the config has no data sources. The plan never contacts AWS.
 - **Generated HCL is escaped.** Every string value is quoted and escaped by code. Only adapter code can emit a raw expression, never user text.
-- **No secrets in the repo.** `.env`, `*.tfvars` and `*.tfstate` are gitignored, and `.env.example` has no secrets. Prompts and model answers are logged at DEBUG only.
+- **No secrets in the repo.** `.env`, `*.tfvars` and `*.tfstate` are gitignored, and `.env.example` has no secrets. Tracked files are scanned for secrets (see below).
+- **Logs are safe to share.** The API writes one JSON line per request (`request_id`, `operation`, `provider`, `resource_count`, `validation_status`, `terraform_status`, `duration_ms`, `error_type`). Requirement text, spec contents, prompts and exception messages are never logged, and a filter masks secrets. Send `X-Request-ID` to set the id; every response returns it.
 - **Request limits.** The request body can be at most 100,000 bytes (413), a spec at most 50 resources, and a requirement at most 2,000 characters (422). Only one generation runs at a time (409).
+
+### Secret scanning
+
+```powershell
+python backend\scripts\check_secrets.py   # no extra tools needed; also runs in pytest
+
+# Optional: gitleaks, including the whole git history
+winget install Gitleaks.Gitleaks
+gitleaks git . --redact
+
+# Optional: run both before every commit
+pip install pre-commit
+pre-commit install
+```
+
+`check_secrets.py` looks in git-tracked files for AWS keys, private key headers, Infracost keys and generic API keys. It prints `file:line` and the rule, never the value, and exits with 1 if it finds something.
 
 ## Known limitations
 

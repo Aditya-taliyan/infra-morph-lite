@@ -6,6 +6,7 @@ from pathlib import Path
 from app.domain.enums import Environment, Provider, Region
 from app.domain.resources import Subnet, VirtualNetwork
 from app.core.config import GENERATED_DIR
+from app.core.logging import record_request
 from app.domain.cost import CostEstimate
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
@@ -116,12 +117,14 @@ class InfrastructureGenerationService:
 
         Raises PipelineBusyError if another run is in progress.
         """
+        record_request(provider=str(spec.provider), resource_count=len(spec.resources))
         if not _PIPELINE_LOCK.acquire(blocking=False):
             raise PipelineBusyError("another generation is in progress")
         try:
             result = self._run_pipeline(spec, generated_root or self.generated_root)
         finally:
             _PIPELINE_LOCK.release()
+        record_request(terraform_status=_terraform_status(result.steps))
         if result.output_dir is not None:
             _save_run_record(spec, result)
         return result
@@ -130,6 +133,7 @@ class InfrastructureGenerationService:
         self, spec: InfrastructureSpecification, generated_root: Path
     ) -> GenerationResult:
         validation = validate(spec)
+        record_request(validation_status="valid" if validation.is_valid else "invalid")
         if not validation.is_valid:
             # No run directory for a spec that never reaches generation.
             return GenerationResult(validation=validation)
@@ -175,6 +179,16 @@ class InfrastructureGenerationService:
             # Type only: the exception text could contain the API key.
             logger.error("Cost estimation failed unexpectedly: %s", type(exc).__name__)
             return CostEstimate.unavailable("Unexpected error.")
+
+
+def _terraform_status(steps: list[CommandResult]) -> str | None:
+    """One word for the log: the failed step's status, else passed or skipped."""
+    for status in (
+        CommandStatus.FAILED, CommandStatus.TIMEOUT, CommandStatus.PASSED, CommandStatus.SKIPPED
+    ):
+        if any(s.status is status for s in steps):
+            return str(status)
+    return None
 
 
 def _save_run_record(spec: InfrastructureSpecification, result: GenerationResult) -> None:

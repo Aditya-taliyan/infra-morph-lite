@@ -77,7 +77,7 @@ def test_reapproval_is_refused(tmp_path: Path):
     assert len(service(tmp_path).list()) == 1
 
 
-@pytest.mark.parametrize("run_id", ["20261124T100000Z-000000", "../generated", "x"])
+@pytest.mark.parametrize("run_id", ["20261124T100000Z-000000", "../generated", "..\\generated", "C:/Windows", "x"])
 def test_unknown_run(tmp_path: Path, run_id: str):
     with pytest.raises(RunNotFoundError):
         service(tmp_path).approve(run_id, "Aditya")

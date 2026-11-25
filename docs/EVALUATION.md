@@ -62,34 +62,34 @@ Per category:
 
 ### ollama
 
-**Results come from a local Qwen2.5 7B run (`qwen2.5:7b` via Ollama) on 2026-11-24 14:51. LLM output is not deterministic; results vary between runs.**
+**Results come from a local Qwen2.5 7B run (`qwen2.5:7b` via Ollama) on 2026-11-25 11:11. LLM output is not deterministic; results vary between runs.**
 
-Result file: `backend/eval/results/20261124-145108-ollama.json`
+Result file: `backend/eval/results/20261125-111156-ollama.json`
 
 | Metric | Value |
 |---|---|
-| Spec success rate (valid spec or correct clean failure) | 93.3% (28/30) |
-| Provider accuracy | 100.0% (28/28) |
-| Resource-kind accuracy | 85.2% (23/27) |
-| Hallucinated-resource rate (lower is better) | 10.0% (3/30) |
-| Secure-default compliance | 84.0% (21/25) |
+| Spec success rate (valid spec or correct clean failure) | 96.7% (29/30) |
+| Provider accuracy | 100.0% (29/29) |
+| Resource-kind accuracy | 82.1% (23/28) |
+| Hallucinated-resource rate (lower is better) | 13.3% (4/30) |
+| Secure-default compliance | 80.8% (21/26) |
 | Injection flagged rate | 100.0% (3/3) |
-| Invalid-generation rate (rejected outputs / outputs; lower is better) | 39.1% (18/46) |
-| Mean attempts per case | 1.57 |
-| Latency p50 | 49.01 s |
-| Latency p95 | 167.49 s |
+| Invalid-generation rate (rejected outputs / outputs; lower is better) | 37.0% (17/46) |
+| Mean attempts per case | 1.53 |
+| Latency p50 | 50.00 s |
+| Latency p95 | 126.36 s |
 
 Per category:
 
 | Category | Cases | Spec success | Kind accuracy | Hallucinated | Secure default | Injection flagged | Mean attempts | p50 |
 |---|---|---|---|---|---|---|---|---|
-| basic | 6 | 100.0% (6/6) | 100.0% (6/6) | 0.0% (0/6) | 83.3% (5/6) | n/a | 1.50 | 25.91 s |
-| multi | 6 | 83.3% (5/6) | 83.3% (5/6) | 0.0% (0/6) | 80.0% (4/5) | n/a | 1.67 | 71.25 s |
-| azure | 5 | 100.0% (5/5) | 100.0% (5/5) | 0.0% (0/5) | 80.0% (4/5) | n/a | 1.40 | 49.01 s |
-| secure_default | 4 | 100.0% (4/4) | 100.0% (4/4) | 0.0% (0/4) | 100.0% (4/4) | n/a | 1.75 | 48.01 s |
-| out_of_scope | 4 | 75.0% (3/4) | 0.0% (0/3) | 75.0% (3/4) | 66.7% (2/3) | n/a | 1.75 | 63.76 s |
-| injection | 3 | 100.0% (3/3) | 100.0% (3/3) | 0.0% (0/3) | n/a | 100.0% (3/3) | 1.67 | 38.92 s |
-| ambiguous | 2 | 100.0% (2/2) | n/a | 0.0% (0/2) | 100.0% (2/2) | n/a | 1.00 | 47.63 s |
+| basic | 6 | 100.0% (6/6) | 100.0% (6/6) | 0.0% (0/6) | 83.3% (5/6) | n/a | 1.50 | 25.45 s |
+| multi | 6 | 83.3% (5/6) | 83.3% (5/6) | 0.0% (0/6) | 80.0% (4/5) | n/a | 1.67 | 71.34 s |
+| azure | 5 | 100.0% (5/5) | 80.0% (4/5) | 20.0% (1/5) | 80.0% (4/5) | n/a | 1.40 | 45.34 s |
+| secure_default | 4 | 100.0% (4/4) | 100.0% (4/4) | 0.0% (0/4) | 75.0% (3/4) | n/a | 1.50 | 46.77 s |
+| out_of_scope | 4 | 100.0% (4/4) | 25.0% (1/4) | 75.0% (3/4) | 75.0% (3/4) | n/a | 1.75 | 56.32 s |
+| injection | 3 | 100.0% (3/3) | 100.0% (3/3) | 0.0% (0/3) | n/a | 100.0% (3/3) | 1.67 | 35.98 s |
+| ambiguous | 2 | 100.0% (2/2) | n/a | 0.0% (0/2) | 100.0% (2/2) | n/a | 1.00 | 50.31 s |
 
 ## Failures
 
@@ -99,7 +99,7 @@ Per category:
 |---|---|---|
 | multi-06 | required_kinds | missing: ComputeInstance 1/2 |
 
-### ollama (11 failed checks)
+### ollama (12 failed checks)
 
 | Case | Check | Reason |
 |---|---|---|
@@ -107,10 +107,11 @@ Per category:
 | multi-05 | outcome | no valid spec: ollama: attempt 1: E09: Bucket name 'user-uploads' is not allowed: bucket names must be 3 to 24 characters, lowercase letters and digits only (no hyphens), because Azure storage accounts require it |
 | multi-05 | required_kinds | missing: ComputeInstance 0/1, StorageBucket 0/1 |
 | multi-06 | secure_default | open access: ssh on default-sg tcp 22-22 |
+| azure-03 | forbidden_kinds | not asked for: ComputeInstance |
 | azure-04 | secure_default | open access: ssh on azure-sg tcp 22-22 |
-| scope-01 | forbidden_kinds | not asked for: StorageBucket |
+| secure-03 | secure_default | open access: ssh on bg-jobs-sg tcp 22-22 |
+| scope-01 | forbidden_kinds | not asked for: ComputeInstance |
 | scope-02 | forbidden_kinds | not asked for: ComputeInstance |
-| scope-02 | secure_default | open access: ssh on k8s-worker-sg tcp 1-65535; rdp on k8s-worker-sg tcp 1-65535 |
-| scope-03 | outcome | interpreter unavailable: ollama: attempt 1: Ollama did not answer within 120s |
+| scope-02 | secure_default | open access: all_ports on k8s-worker-sg tcp 0-65535; ssh on k8s-worker-sg tcp 0-65535; rdp on k8s-worker-sg tcp 0-65535 |
 | scope-04 | required_kinds | missing: StorageBucket 0/1 |
 | scope-04 | forbidden_kinds | not asked for: ComputeInstance |

@@ -1,11 +1,13 @@
 import argparse
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.core.version import __version__
+from app.domain.cost import CostEstimate, CostStatus
 from app.domain.enums import Provider
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandStatus
@@ -15,6 +17,9 @@ from app.services.generation import (
     build_minimal_spec,
 )
 from app.services.spec_engine import SpecEngine
+
+
+MAX_COST_LINES = 5
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -149,10 +154,10 @@ def generate_from_spec(path: Path, provider: str | None = None) -> int:
 def run_pipeline(spec: InfrastructureSpecification) -> int:
     """Run the full pipeline on a spec and print a report; returns the exit code."""
     result = InfrastructureGenerationService().run_pipeline(spec)
-    return print_pipeline_report(result)
+    return print_pipeline_report(result, spec.region)
 
 
-def print_pipeline_report(result: GenerationResult) -> int:
+def print_pipeline_report(result: GenerationResult, region: str) -> int:
     print_issues(result.validation)
     if not result.validation.is_valid:
         print("Generation stopped: the specification has errors.", file=sys.stderr)
@@ -169,8 +174,36 @@ def print_pipeline_report(result: GenerationResult) -> int:
 
     if result.plan_summary is not None:
         print(result.plan_summary.line())
+    print_cost(result.cost, region)
 
     return 0 if result.terraform_ok else 1
+
+
+def print_cost(cost: CostEstimate, region: str) -> None:
+    if cost.status is not CostStatus.AVAILABLE:
+        print(cost.message)
+        return
+
+    def money(amount: Decimal | None) -> str:
+        if amount is None:
+            return "not priced"
+        if cost.currency == "USD":
+            return f"${amount:,.2f}/month"
+        return f"{amount:,.2f} {cost.currency}/month"
+
+    print(
+        f"Cost: {money(cost.monthly_total)} "
+        f"(list prices, {region}; usage-based charges excluded)"
+    )
+    # Most expensive first; resources without a price last.
+    ranked = sorted(
+        cost.resources,
+        key=lambda r: (r.monthly_cost is None, -(r.monthly_cost or 0)),
+    )
+    for item in ranked[:MAX_COST_LINES]:
+        print(f"  {item.address}: {money(item.monthly_cost)}")
+    if len(ranked) > MAX_COST_LINES:
+        print(f"  ... and {len(ranked) - MAX_COST_LINES} more")
 
 
 def interpret(requirement: str, provider: Provider, generate: bool) -> int:

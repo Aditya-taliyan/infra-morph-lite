@@ -155,6 +155,7 @@ def test_non_allowlisted_subcommands_raise_before_running(runner, run_mock, tmp_
 def test_cloud_credentials_never_reach_terraform(runner, run_mock, monkeypatch, tmp_path):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAREALKEY")
     monkeypatch.setenv("AWS_PROFILE", "prod")
+    monkeypatch.setenv("INFRACOST_API_KEY", "not-for-terraform")
     monkeypatch.setenv("ARM_CLIENT_SECRET", "secret")
     monkeypatch.setenv("AZURE_CLIENT_ID", "client")
     monkeypatch.setenv("INFRAMORPH_KEEP_ME", "yes")
@@ -164,6 +165,7 @@ def test_cloud_credentials_never_reach_terraform(runner, run_mock, monkeypatch, 
     env = run_mock.call_args.kwargs["env"]
     assert "AWS_ACCESS_KEY_ID" not in env
     assert "AWS_PROFILE" not in env
+    assert "INFRACOST_API_KEY" not in env
     assert not [k for k in env if k.upper().startswith(("AWS_", "ARM_", "AZURE_"))]
     assert env["INFRAMORPH_KEEP_ME"] == "yes"
 

@@ -1,3 +1,4 @@
+import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -5,15 +6,19 @@ from pathlib import Path
 from app.domain.enums import Environment, Provider, Region
 from app.domain.resources import Subnet, VirtualNetwork
 from app.core.config import GENERATED_DIR
+from app.domain.cost import CostEstimate
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.domain.validation import ValidationResult
 from app.generators.terraform_generator import TerraformGenerator
+from app.infrastructure.infracost_runner import InfracostRunner
 from app.infrastructure.terraform_runner import TerraformRunner
 from app.domain.approval import files_hash
 from app.infrastructure.workspace import new_run_dir, read_tf_files, write_run_record
 from app.providers.registry import get_provider
 from app.validators.semantic import validate
+
+logger = logging.getLogger(__name__)
 
 # Terraform runs share one data dir (see terraform_runner), so only one
 # pipeline may run at a time in this process. A second caller is refused
@@ -57,6 +62,9 @@ class GenerationResult:
     # Terraform steps in the order they ran; stops after the first failure.
     steps: list[CommandResult] = field(default_factory=list)
     plan_summary: PlanSummary | None = None
+    cost: CostEstimate = field(
+        default_factory=lambda: CostEstimate.unavailable("terraform validate did not pass.")
+    )
 
     @property
     def terraform_ok(self) -> bool:
@@ -71,13 +79,18 @@ class InfrastructureGenerationService:
 
     run_pipeline continues with terraform init -> fmt check -> validate -> plan
     (plan is reported as skipped for providers that cannot plan offline: Azure).
+    After a passed validate it also estimates cost; that can never fail the run.
     """
 
     def __init__(
-        self, runner: TerraformRunner | None = None, generated_root: Path = GENERATED_DIR
+        self,
+        runner: TerraformRunner | None = None,
+        generated_root: Path = GENERATED_DIR,
+        cost_runner: InfracostRunner | None = None,
     ) -> None:
         self.runner = runner or TerraformRunner()
         self.generated_root = generated_root
+        self.cost_runner = cost_runner or InfracostRunner()
 
     def generate(
         self, spec: InfrastructureSpecification, output_dir: Path | None = None
@@ -136,6 +149,9 @@ class InfrastructureGenerationService:
             if not result.terraform_ok:
                 return result
 
+        if result.steps[-1].status is CommandStatus.PASSED:
+            result.cost = self._estimate_cost(run_dir)
+
         if not get_provider(spec.provider).offline_plan:
             result.steps.append(
                 CommandResult(
@@ -151,6 +167,14 @@ class InfrastructureGenerationService:
         plan_steps, result.plan_summary = self.runner.plan(run_dir)
         result.steps.extend(plan_steps)
         return result
+
+    def _estimate_cost(self, run_dir: Path) -> CostEstimate:
+        try:
+            return self.cost_runner.estimate(run_dir)
+        except Exception as exc:
+            # Type only: the exception text could contain the API key.
+            logger.error("Cost estimation failed unexpectedly: %s", type(exc).__name__)
+            return CostEstimate.unavailable("Unexpected error.")
 
 
 def _save_run_record(spec: InfrastructureSpecification, result: GenerationResult) -> None:

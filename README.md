@@ -256,7 +256,7 @@ python backend\scripts\run_demos.py --rule-based  # same, rule-based interpreter
 - **No shell.** Commands run as argument lists (`subprocess.run([...])`), never with `shell=True`.
 - **Timeouts on everything.** 120 s for `init`, 60 s for the other Terraform commands, 120 s for Ollama. A timeout is reported as a step status.
 - **Isolated run directories.** Each run gets a fresh `backend/generated/<timestamp>-<random>/`, created with `exist_ok=False`, and Terraform runs with that directory as `cwd`.
-- **Cloud credentials stripped.** Every `AWS_*`, `ARM_*` and `AZURE_*` variable is removed from Terraform's environment, so real credentials on the machine can never be used.
+- **Cloud credentials stripped.** Every `AWS_*`, `ARM_*`, `AZURE_*` and `INFRACOST_*` variable is removed from Terraform's environment, so real credentials on the machine can never be used.
 - **Mock provider credentials.** The generated provider block uses `access_key = "mock"` plus `skip_credentials_validation`, `skip_requesting_account_id` and `skip_metadata_api_check`, and the config has no data sources. The plan never contacts AWS.
 - **Generated HCL is escaped.** Every string value is quoted and escaped by code. Only adapter code can emit a raw expression, never user text.
 - **No secrets in the repo.** `.env`, `*.tfvars` and `*.tfstate` are gitignored, and `.env.example` has no secrets. Prompts and model answers are logged at DEBUG only.
@@ -268,12 +268,12 @@ python backend\scripts\run_demos.py --rule-based  # same, rule-based interpreter
 - **AMI IDs are examples.** The AMI comes from a `locals` map of region → example Ubuntu 22.04 AMI ID, merged with an optional `ubuntu_ami_overrides` variable. This lets the plan run offline without data sources. Before a real deploy, set the override to current AMIs for the chosen region.
 - **Bucket names must be globally unique on a real deploy.** S3 names are global. The plan runs with mock credentials, so it cannot detect a name that is already taken.
 - **Azure plan needs a real login.** Even when Azure generation is added, it will stop at `terraform fmt` and `validate`. `terraform plan` for `azurerm` needs real Azure credentials, which this project does not use.
-- **Milestone 2 work:** Azure generation and cost estimation (Infracost) are not in Milestone 1. Approvals are stored as JSON records in `backend/approvals/` (see `docs/API.md`).
+- **Cost estimation is optional.** It needs the `infracost` CLI (a version with `infracost breakdown`) and `INFRACOST_API_KEY` in `backend/.env`; otherwise the result is "Cost estimation unavailable." Infracost sends resource types and pricing attributes to its pricing API. Prices are list prices without usage-based charges.
+- **Milestone 2 work:** Azure generation is not in Milestone 1. Approvals are stored as JSON records in `backend/approvals/` (see `docs/API.md`).
 - **Deployment is out of scope by design.** InfraMorph never runs `terraform apply` or `terraform destroy`. A plan is the furthest it goes.
 
 ## Roadmap (Milestone 2, due 30 Nov 2026)
 
 - **Azure adapter and templates**: resource group, VNet/subnets, NSG and rules, NIC + public IP + Linux VM, storage account + container, with `fmt` and `validate` (Demo 4). Enable Azure in the UI.
-- **Cost estimation**: run Infracost on the run directory when `infracost` is installed and `INFRACOST_API_KEY` is set, otherwise show "Cost estimation unavailable". Prices are never invented.
 - **Persistent approval record**: written per run (who, when, which run ID and plan), still without any apply.
 - **Future scope**: more resource kinds (load balancer, database), a GCP adapter, an LLM evaluation set, and the academic project report.

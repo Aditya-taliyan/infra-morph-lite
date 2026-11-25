@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 
+from app.domain.cost import CostEstimate
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.models.specifications import ValidationResponse
 from app.services.generation import GenerationResult
@@ -31,6 +32,7 @@ class GenerateResponse(BaseModel):
     # False when a step failed or timed out; that step is the last in `steps`.
     terraform_ok: bool
     plan_summary: PlanSummary | None
+    cost: CostEstimate
 
     @classmethod
     def from_result(cls, result: GenerationResult) -> "GenerateResponse":
@@ -41,4 +43,5 @@ class GenerateResponse(BaseModel):
             steps=[StepResult.from_command(s) for s in result.steps],
             terraform_ok=result.terraform_ok,
             plan_summary=result.plan_summary,
+            cost=result.cost,
         )

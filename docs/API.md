@@ -213,6 +213,11 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/generate `
       "aws_vpc_security_group_ingress_rule.web_sg_ingress_2",
       "aws_vpc_security_group_ingress_rule.web_sg_ingress_3"
     ]
+  },
+  "cost": {
+    "status": "unavailable", "currency": null, "monthly_total": null,
+    "resources": [], "unsupported_count": 0,
+    "message": "Cost estimation unavailable. INFRACOST_API_KEY is not set."
   }
 }
 ```
@@ -221,6 +226,7 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/generate `
 - `status` is one of `passed`, `failed`, `timeout`, `skipped`. `skipped` means Terraform is not installed (`exit_code` is `null` and `stderr` says so).
 - `terraform_ok` is `false` when a step failed or timed out. **A failed Terraform step is still HTTP 200**: the request worked, but the infrastructure did not pass. Read `steps[-1].stderr`.
 - `plan_summary` is `null` unless `plan` and `show` both passed.
+- `cost` is always present. It runs after `validate` passed (AWS and Azure) and never fails the run. `status` is `available` or `unavailable`; `message` gives the reason. Amounts are decimal strings. `null` means no price is known, which is not the same as free. Each entry in `resources` is `{address, monthly_cost, note}`; types Infracost only counts appear as `"<type> (<count>)"`.
 
 **Errors:**
 

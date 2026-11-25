@@ -152,6 +152,10 @@ def can_be_approved(generation: dict) -> bool:
     )
 
 
+def format_cost(amount: str | None, currency: str) -> str:
+    return "not priced" if amount is None else f"{float(amount):,.2f} {currency}"
+
+
 def show_approval_record(record: dict) -> None:
     st.markdown(
         f"- Approval ID: `{record['approval_id']}`\n"
@@ -267,8 +271,10 @@ if interpretation is not None:
         reset("terraform")
         spec = parse_spec_text()
         if spec is not None:
-            with st.spinner("Generating Terraform and running fmt, validate and plan (~10 s)..."):
+            with st.spinner("Generating Terraform and running fmt, validate, cost and plan (~10 s)..."):
                 st.session_state.generation = call_api(client.generate, spec)
+            # Kept for the cost caveat: the spec text may be edited later.
+            st.session_state.generation_region = spec.get("region")
 
     generation = st.session_state.get("generation")
     if generation is None:
@@ -309,9 +315,40 @@ if interpretation is not None and generation is not None:
             for address in summary["resource_addresses"]:
                 st.markdown(f"- `{address}`")
 
-# ---------------------------------------------------------------- 6. Approval
+# ---------------------------------------------------------------- 6. Cost estimate
 if interpretation is not None and generation is not None:
-    st.header("6. Approval")
+    st.header("6. Cost estimate")
+    cost = generation["cost"]
+    if cost["status"] != "available":
+        st.info(cost["message"])
+    else:
+        st.metric("Monthly total", format_cost(cost["monthly_total"], cost["currency"]))
+        if cost["message"]:
+            st.info(cost["message"])
+        if cost["unsupported_count"]:
+            st.warning(
+                f"{cost['unsupported_count']} resource(s) not supported by Infracost; "
+                "the total leaves them out."
+            )
+        st.dataframe(
+            [
+                {
+                    "Resource": r["address"],
+                    "Monthly cost": format_cost(r["monthly_cost"], cost["currency"]),
+                    "Note": r["note"],
+                }
+                for r in cost["resources"]
+            ],
+            hide_index=True,
+        )
+        st.caption(
+            f"List prices for {st.session_state.generation_region}; usage-based charges "
+            "such as data transfer are not included."
+        )
+
+# ---------------------------------------------------------------- 7. Approval
+if interpretation is not None and generation is not None:
+    st.header("7. Approval")
     can_approve = can_be_approved(generation)
     if not can_approve:
         st.warning(

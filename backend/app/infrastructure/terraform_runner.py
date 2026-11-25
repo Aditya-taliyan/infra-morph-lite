@@ -5,8 +5,9 @@ Safety rules enforced here:
   ValueError before anything is executed.
 - Argument lists only, never shell=True; always a timeout; cwd is the run's
   isolated directory.
-- The child environment has every AWS_*, ARM_* and AZURE_* variable removed,
-  so real cloud credentials on this machine can never reach Terraform.
+- The child environment has every AWS_*, ARM_*, AZURE_* and INFRACOST_*
+  variable removed (child_env.py), so real credentials on this machine can
+  never reach Terraform.
 - The environment is never logged or returned.
 
 Shared data directory (performance, mainly on Windows):
@@ -29,7 +30,6 @@ in parallel.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import threading
@@ -38,9 +38,9 @@ from pathlib import Path
 
 from app.core.config import SHARED_DATA_DIR, Settings, settings
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
+from app.infrastructure.child_env import stripped_env
 
 ALLOWED_SUBCOMMANDS = frozenset({"init", "fmt", "validate", "plan", "show"})
-CREDENTIAL_PREFIXES = ("AWS_", "ARM_", "AZURE_")
 PLAN_FILE = "plan.tfplan"
 LOCK_FILE = ".terraform.lock.hcl"
 
@@ -181,11 +181,7 @@ class TerraformRunner:
         )
 
     def _child_env(self) -> dict[str, str]:
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if not key.upper().startswith(CREDENTIAL_PREFIXES)
-        }
+        env = stripped_env()
         self.shared_data_dir.mkdir(parents=True, exist_ok=True)
         # Absolute path: Terraform would resolve a relative one against cwd.
         env["TF_DATA_DIR"] = str(self.shared_data_dir.resolve())

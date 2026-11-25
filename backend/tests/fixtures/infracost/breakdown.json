@@ -1,0 +1,51 @@
+{
+  "version": "0.2",
+  "currency": "USD",
+  "projects": [
+    {
+      "name": "run",
+      "metadata": { "path": "run", "type": "terraform_dir" },
+      "breakdown": {
+        "resources": [
+          {
+            "name": "aws_instance.web_server",
+            "resourceType": "aws_instance",
+            "monthlyCost": "8.392",
+            "costComponents": [
+              { "name": "Instance usage", "monthlyCost": "7.592" }
+            ],
+            "subresources": [
+              {
+                "name": "root_block_device",
+                "monthlyCost": "0.8",
+                "costComponents": [{ "name": "Storage", "monthlyCost": "0.8" }]
+              }
+            ]
+          },
+          {
+            "name": "aws_s3_bucket.assets",
+            "resourceType": "aws_s3_bucket",
+            "monthlyCost": null,
+            "subresources": [
+              {
+                "name": "Standard",
+                "monthlyCost": null,
+                "costComponents": [{ "name": "Storage", "monthlyCost": null }]
+              }
+            ]
+          }
+        ],
+        "totalMonthlyCost": "8.392"
+      }
+    }
+  ],
+  "totalMonthlyCost": "8.392",
+  "summary": {
+    "totalDetectedResources": 6,
+    "totalSupportedResources": 2,
+    "totalUnsupportedResources": 1,
+    "totalNoPriceResources": 3,
+    "unsupportedResourceCounts": { "aws_example_thing": 1 },
+    "noPriceResourceCounts": { "aws_subnet": 2, "aws_vpc": 1 }
+  }
+}

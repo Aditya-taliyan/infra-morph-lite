@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,9 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     # A 7B model on a laptop CPU can take a minute per answer.
     ollama_timeout_seconds: float = 120
+    # Optional free Infracost key; without it cost estimation is "unavailable".
+    infracost_api_key: SecretStr | None = None
+    infracost_timeout_seconds: float = 90
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

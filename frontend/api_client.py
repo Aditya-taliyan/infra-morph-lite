@@ -17,8 +17,9 @@ HEALTH_TIMEOUT_SECONDS = 3
 # Approvals only read and write small JSON files.
 FAST_TIMEOUT_SECONDS = 10
 # The backend may try Ollama 3 times at up to 120 s each, and a Terraform
-# run is init + fmt + validate + plan; both stay under this limit.
-SLOW_TIMEOUT_SECONDS = 400
+# run is init + fmt + validate + plan + show (120 s + 4 x 60 s) plus infracost
+# (90 s); both stay under this limit.
+SLOW_TIMEOUT_SECONDS = 500
 
 
 def backend_url() -> str:

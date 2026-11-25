@@ -1,6 +1,9 @@
 import re
 from pathlib import Path
 
+import pytest
+
+from app.domain.cost import CostEstimate, CostStatus
 from app.domain.terraform import CommandResult, CommandStatus, PlanSummary
 from app.generators.terraform_generator import FILES
 from app.infrastructure.workspace import RUN_RECORD, new_run_dir, read_run_record
@@ -129,3 +132,57 @@ def test_azure_pipeline_skips_plan_without_calling_runner(tmp_path: Path):
     assert plan.stderr == "Azure plan requires an Azure login; not run by design"
     assert result.plan_summary is None
     assert result.terraform_ok
+
+
+class FakeCostRunner:
+    def __init__(self, result) -> None:
+        self.result = result
+        self.calls: list[Path] = []
+
+    def estimate(self, run_dir):
+        self.calls.append(run_dir)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+PRICED = CostEstimate(status=CostStatus.AVAILABLE, currency="USD", monthly_total="8.39")
+
+
+def run_with_cost(tmp_path, cost_result, spec="demo2", **runner_args):
+    cost_runner = FakeCostRunner(cost_result)
+    service = InfrastructureGenerationService(
+        FakeRunner(**runner_args), generated_root=tmp_path, cost_runner=cost_runner
+    )
+    return service.run_pipeline(load_spec(spec)), cost_runner
+
+
+@pytest.mark.parametrize("spec", ["demo2", "demo4_azure"])
+def test_cost_runs_after_validate_for_both_providers(tmp_path: Path, spec):
+    result, cost_runner = run_with_cost(tmp_path, PRICED, spec)
+
+    assert result.cost == PRICED
+    assert cost_runner.calls == [result.output_dir]
+
+
+def test_cost_is_kept_when_plan_fails(tmp_path: Path):
+    result, _ = run_with_cost(tmp_path, PRICED, fail="plan")
+
+    assert not result.terraform_ok
+    assert result.cost == PRICED
+
+
+@pytest.mark.parametrize("args", [{"fail": "validate"}, {"status": CommandStatus.SKIPPED}])
+def test_no_cost_unless_validate_passed(tmp_path: Path, args):
+    result, cost_runner = run_with_cost(tmp_path, PRICED, **args)
+
+    assert cost_runner.calls == []
+    assert result.cost.status is CostStatus.UNAVAILABLE
+
+
+def test_cost_crash_does_not_fail_the_run_or_leak(tmp_path: Path, caplog):
+    result, _ = run_with_cost(tmp_path, RuntimeError("secret-text"))
+
+    assert result.terraform_ok and result.plan_summary is not None
+    assert result.cost.status is CostStatus.UNAVAILABLE
+    assert "secret-text" not in caplog.text + result.cost.message

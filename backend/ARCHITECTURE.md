@@ -22,12 +22,12 @@ Two separate requests make the human the checkpoint: `POST /specifications` stop
 
 | Package | Responsibility | Key files |
 |---|---|---|
-| `domain/` | The IR and core types. Pydantic only; no FastAPI, Jinja2, httpx or subprocess | `spec.py` (InfrastructureSpecification), `resources.py` (the 4 kinds, discriminated by `kind`), `enums.py`, `validation.py` (ValidationIssue/Result), `terraform.py` (CommandResult, CommandStatus, PlanSummary) |
+| `domain/` | The IR and core types. Pydantic only; no FastAPI, Jinja2, httpx or subprocess | `spec.py` (InfrastructureSpecification), `resources.py` (the 4 kinds, discriminated by `kind`), `enums.py`, `validation.py` (ValidationIssue/Result), `terraform.py` (CommandResult, CommandStatus, PlanSummary), `cost.py` (CostEstimate) |
 | `validators/` | Semantic validation as pure functions over the IR | `semantic.py`: `validate(spec) -> ValidationResult`, `ALLOWED_REGIONS` |
 | `providers/` | IR → provider-specific Terraform resources (as data, not text). The only Python code that names `aws_*` resources | `base.py` (ProviderAdapter, RenderContext, Expression, …), `aws.py` (AWSProvider), `registry.py` (`get_provider`; Azure raises UnsupportedProviderError) |
 | `generators/` | RenderContext → `.tf` text with Jinja2 | `terraform_generator.py`, `hcl.py` (quoting/escaping filters), `templates/aws/*.tf.j2` |
 | `interpreters/` | Natural language → candidate IR → checked spec | `base.py` (SpecInterpreter, `check_candidate`), `ollama_interpreter.py`, `rule_based.py` |
-| `infrastructure/` | External I/O | `terraform_runner.py` (allowlisted subprocess), `ollama_client.py` (httpx → `/api/chat`), `workspace.py` (per-run directories) |
+| `infrastructure/` | External I/O | `terraform_runner.py` and `infracost_runner.py` (allowlisted subprocesses), `child_env.py` (credential stripping), `ollama_client.py` (httpx → `/api/chat`), `workspace.py` (per-run directories) |
 | `services/` | Orchestration | `spec_engine.py` (primary + fallback), `generation.py` (validate → generate → terraform checks), `health.py` |
 | `models/` | API request/response schemas (transport types) | `specifications.py`, `interpretation.py`, `generation.py`, `errors.py`, `health.py` |
 | `api/` | FastAPI routes, error mapping, middleware; no business logic in handlers | `v1/*.py`, `errors.py`, `middleware.py` (body size limit), `dependencies.py` |
@@ -96,7 +96,9 @@ Azure is planned for Milestone 2 behind the same `ProviderAdapter` interface (ma
 6. `terraform init -backend=false` → `fmt -check -diff` → `validate` → `plan -out=plan.tfplan` → `show -json plan.tfplan`. The pipeline stops at the first failed or timed-out step. A missing `terraform` gives SKIPPED steps.
 7. The `show -json` output is parsed into a `PlanSummary` (to_add, to_change, to_destroy, resource addresses).
 
-The terraform runner (`infrastructure/terraform_runner.py`) enforces the safety rules: an allowlist (`init`, `fmt`, `validate`, `plan`, `show`), argument lists without a shell, a timeout on every command, `cwd` = the run directory, and an environment with all `AWS_*`/`ARM_*`/`AZURE_*` variables removed. Each command records its command, exit code, stdout, stderr, duration and status.
+The terraform runner (`infrastructure/terraform_runner.py`) enforces the safety rules: an allowlist (`init`, `fmt`, `validate`, `plan`, `show`), argument lists without a shell, a timeout on every command, `cwd` = the run directory, and an environment with all `AWS_*`/`ARM_*`/`AZURE_*`/`INFRACOST_*` variables removed. Each command records its command, exit code, stdout, stderr, duration and status.
+
+After `validate` passes, `infrastructure/infracost_runner.py` runs `infracost breakdown` (the only allowed Infracost subcommand) with the same stripped environment plus `INFRACOST_API_KEY`. Any failure gives a `CostEstimate` with status `unavailable`; it never fails the run, and an unknown price stays `null`. Infracost sends resource types and pricing attributes to its pricing API.
 
 ## 6. Interpretation (`services/spec_engine.py`, `interpreters/`)
 

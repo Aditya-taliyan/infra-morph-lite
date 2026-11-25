@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 from app.cli.main import main
+from app.domain.cost import CostEstimate, CostStatus, ResourceCost
 from app.domain.terraform import CommandStatus
 from tests.helpers import FIXTURES
-from tests.unit.test_generation_pipeline import FakeRunner
+from tests.unit.test_generation_pipeline import FakeCostRunner, FakeRunner
 
 DEMO2 = FIXTURES / "specs" / "demo2.json"
 
@@ -17,10 +18,13 @@ def fake_pipeline(monkeypatch, tmp_path):
     from app.services import generation
 
     runner = FakeRunner()
+    cost_runner = FakeCostRunner(CostEstimate.unavailable("INFRACOST_API_KEY is not set."))
+    runner.cost_runner = cost_runner  # tests set the cost result here
     original = generation.InfrastructureGenerationService.run_pipeline
 
     def run_pipeline(self, spec, generated_root=None):
         self.runner = runner
+        self.cost_runner = cost_runner
         return original(self, spec, generated_root=tmp_path)
 
     monkeypatch.setattr(generation.InfrastructureGenerationService, "run_pipeline", run_pipeline)
@@ -109,3 +113,41 @@ def test_provider_flag_must_match_spec(monkeypatch, capsys, fake_pipeline):
     assert _run(monkeypatch, str(DEMO2), "--provider", "azure") == 1
     assert "does not match the spec's provider 'aws'" in capsys.readouterr().err
     assert fake_pipeline.calls == []
+
+
+def test_cost_is_printed_after_the_plan(monkeypatch, capsys, fake_pipeline):
+    costs = [None, "1", "30", "2.5", None, "4"]
+    fake_pipeline.cost_runner.result = CostEstimate(
+        status=CostStatus.AVAILABLE,
+        currency="USD",
+        monthly_total="1037.5",
+        resources=[
+            ResourceCost(address=f"res.r{i}", monthly_cost=c) for i, c in enumerate(costs)
+        ],
+    )
+
+    assert _run(monkeypatch, str(DEMO2)) == 0
+
+    out = capsys.readouterr().out
+    region = json.loads(DEMO2.read_text(encoding="utf-8"))["region"]
+    assert out.splitlines()[-8:] == [
+        "Plan: 11 to add, 0 to change, 0 to destroy.",
+        f"Cost: $1,037.50/month (list prices, {region}; usage-based charges excluded)",
+        "  res.r2: $30.00/month",
+        "  res.r5: $4.00/month",
+        "  res.r3: $2.50/month",
+        "  res.r1: $1.00/month",
+        "  res.r0: not priced",
+        "  ... and 1 more",
+    ]
+
+
+def test_unavailable_cost_prints_the_reason_and_no_number(monkeypatch, capsys, fake_pipeline):
+    assert _run(monkeypatch, str(DEMO2)) == 0
+
+    out = capsys.readouterr().out
+    assert out.splitlines()[-2:] == [
+        "Plan: 11 to add, 0 to change, 0 to destroy.",
+        "Cost estimation unavailable. INFRACOST_API_KEY is not set.",
+    ]
+    assert "$" not in out

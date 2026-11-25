@@ -32,6 +32,9 @@ def test_generate_success(tmp_path: Path):
     ]
     assert body["terraform_ok"] is True
     assert body["plan_summary"]["to_add"] == 11
+    assert body["cost"]["status"] == "unavailable"
+    assert body["cost"]["message"].startswith("Cost estimation unavailable. ")
+    assert body["cost"]["monthly_total"] is None
     assert [w["code"] for w in body["validation"]["warnings"]] == ["W01"]
     assert runner.calls == ["init", "fmt", "validate", "plan", "show"]
 

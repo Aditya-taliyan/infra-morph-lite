@@ -152,8 +152,8 @@ def can_be_approved(generation: dict) -> bool:
     )
 
 
-def format_cost(amount: str | None, currency: str) -> str:
-    return "not priced" if amount is None else f"{float(amount):,.2f} {currency}"
+def format_cost(amount: str | None, currency: str, no_amount: str) -> str:
+    return no_amount if amount is None else f"{float(amount):,.2f} {currency}"
 
 
 def show_approval_record(record: dict) -> None:
@@ -322,7 +322,10 @@ if interpretation is not None and generation is not None:
     if cost["status"] != "available":
         st.info(cost["message"])
     else:
-        st.metric("Monthly total", format_cost(cost["monthly_total"], cost["currency"]))
+        st.metric(
+            "Monthly total",
+            format_cost(cost["monthly_total"], cost["currency"], "no fixed monthly price"),
+        )
         if cost["message"]:
             st.info(cost["message"])
         if cost["unsupported_count"]:
@@ -334,7 +337,9 @@ if interpretation is not None and generation is not None:
             [
                 {
                     "Resource": r["address"],
-                    "Monthly cost": format_cost(r["monthly_cost"], cost["currency"]),
+                    "Monthly cost": format_cost(
+                        r["monthly_cost"], cost["currency"], r["pricing"]
+                    ),
                     "Note": r["note"],
                 }
                 for r in cost["resources"]

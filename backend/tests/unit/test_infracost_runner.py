@@ -143,15 +143,25 @@ def test_parses_sample(runner, run_mock, tmp_path):
     assert result.status is CostStatus.AVAILABLE
     assert result.currency == "USD"
     assert result.monthly_total == Decimal("8.392")
-    assert result.unsupported_count == 1
-    assert [(r.address, r.monthly_cost) for r in result.resources] == [
-        ("aws_instance.web_server", Decimal("8.392")),
-        ("aws_s3_bucket.assets", None),
-        ("aws_example_thing (1)", None),
-        ("aws_subnet (2)", None),
-        ("aws_vpc (1)", None),
+    assert result.unsupported_count == 2
+    # freeResources holds free and unsupported resources; the summary separates them.
+    assert [(r.address, r.pricing.value, r.monthly_cost) for r in result.resources] == [
+        ("aws_instance.web_server", "priced", Decimal("8.392")),
+        ("aws_s3_bucket.assets", "usage-based", None),
+        ("aws_subnet.a", "no charge", None),
+        ("aws_subnet.b", "no charge", None),
+        ("aws_vpc.main", "no charge", None),
+        ("aws_route_table_association (1)", "no charge", None),
+        ("aws_example_thing.x", "not priced", None),
+        ("aws_example_thing (1)", "not priced", None),
     ]
-    assert all(r.note for r in result.resources if r.monthly_cost is None)
+
+
+def test_resource_of_an_uncounted_type_is_not_called_free():
+    document = json.loads(SAMPLE)
+    document["summary"] = {}
+    pricing = {r.address: r.pricing.value for r in parse_breakdown(document).resources}
+    assert pricing["aws_vpc.main"] == "not priced"
 
 
 def sample_with(resources: list[dict], total: str) -> dict:
@@ -181,9 +191,14 @@ def test_price_not_found_is_null_and_real_zero_stays():
             "2",
         )
     )
-    assert [r.monthly_cost for r in result.resources[:3]] == [None, Decimal(2), Decimal(0)]
-    assert result.resources[0].note == "Price not found."
-    assert result.resources[1].note.startswith("Partial")
+    by_address = {r.address: r for r in result.resources}
+    assert by_address["a.missing"].monthly_cost is None
+    assert by_address["a.missing"].pricing.value == "not priced"
+    assert by_address["a.missing"].note == "Price not found."
+    assert by_address["a.partial"].monthly_cost == Decimal(2)
+    assert by_address["a.partial"].note.startswith("Partial")
+    assert by_address["a.zero"].monthly_cost == Decimal(0)
+    assert by_address["a.zero"].pricing.value == "priced"
 
 
 def test_project_errors_are_unavailable():

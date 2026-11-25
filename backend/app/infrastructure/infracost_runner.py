@@ -12,11 +12,12 @@ import logging
 import shutil
 import subprocess
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings, settings
-from app.domain.cost import CostEstimate, CostStatus, ResourceCost
+from app.domain.cost import CostEstimate, CostStatus, Pricing, ResourceCost
 from app.infrastructure.child_env import stripped_env
 
 ALLOWED_COMMANDS = frozenset({("infracost", "breakdown")})
@@ -88,24 +89,31 @@ class InfracostRunner:
 
 def parse_breakdown(document: dict[str, Any]) -> CostEstimate:
     """`infracost breakdown --format json` -> CostEstimate. Raises on bad shapes."""
+    summary = document.get("summary") or {}
+    unsupported = summary.get("unsupportedResourceCounts") or {}
+    no_price = summary.get("noPriceResourceCounts") or {}
+
     resources: list[ResourceCost] = []
+    listed: Counter[str] = Counter()
     for project in document["projects"]:
         if (project.get("metadata") or {}).get("errors"):
             # Infracost exits 0 here, with a total that misses resources.
             return CostEstimate.unavailable("Infracost could not evaluate the Terraform files.")
-        resources.extend(_resource_cost(r) for r in project["breakdown"]["resources"])
-
-    summary = document.get("summary") or {}
-    unsupported = summary.get("unsupportedResourceCounts") or {}
-    free = summary.get("noPriceResourceCounts") or {}
-    for counts, note in (
-        (unsupported, "Not supported by Infracost; no price known."),
-        (free, "Infracost lists no price for this resource type."),
-    ):
-        resources.extend(
-            ResourceCost(address=f"{kind} ({count})", monthly_cost=None, note=note)
-            for kind, count in sorted(counts.items())
-        )
+        breakdown = project["breakdown"]
+        resources.extend(_resource_cost(r) for r in breakdown["resources"])
+        # Despite its name, freeResources also holds the unsupported resources;
+        # only the summary counts (by type) tell the two apart.
+        for resource in breakdown.get("freeResources") or []:
+            kind = resource["resourceType"]
+            listed[kind] += 1
+            free = kind in no_price and kind not in unsupported
+            resources.append(_without_price(resource["name"], free))
+    # freeResources leaves some types out (e.g. associations); show those by count.
+    for counts, free in ((no_price, True), (unsupported, False)):
+        for kind, count in sorted(counts.items()):
+            if count > listed[kind]:
+                resources.append(_without_price(f"{kind} ({count - listed[kind]})", free))
+    resources.sort(key=lambda r: list(Pricing).index(r.pricing))
 
     # Infracost reports a "0" total when nothing has a price.
     priced = any(r.monthly_cost is not None for r in resources)
@@ -119,17 +127,33 @@ def parse_breakdown(document: dict[str, Any]) -> CostEstimate:
     )
 
 
+def _without_price(address: str, free: bool) -> ResourceCost:
+    return ResourceCost(
+        address=address,
+        pricing=Pricing.NO_CHARGE if free else Pricing.NOT_PRICED,
+        monthly_cost=None,
+        note="" if free else "Not supported by Infracost; no price known.",
+    )
+
+
 def _resource_cost(resource: dict[str, Any]) -> ResourceCost:
-    cost = ResourceCost(address=resource["name"], monthly_cost=resource["monthlyCost"])
-    if cost.monthly_cost is None:
-        cost.note = "No fixed monthly price (usage-based or unknown)."
-    elif _price_not_found(resource):
+    cost = ResourceCost(
+        address=resource["name"],
+        pricing=Pricing.PRICED,
+        # Infracost leaves the key out for usage-based resources.
+        monthly_cost=resource.get("monthlyCost"),
+    )
+    if _price_not_found(resource):
         # Infracost counts a missing price as 0.
-        if cost.monthly_cost == 0:
+        if not cost.monthly_cost:
             cost.monthly_cost = None
+            cost.pricing = Pricing.NOT_PRICED
             cost.note = "Price not found."
         else:
             cost.note = "Partial: some prices were not found."
+    elif cost.monthly_cost is None:
+        cost.pricing = Pricing.USAGE_BASED
+        cost.note = "No fixed monthly price; the cost depends on usage."
     return cost
 
 

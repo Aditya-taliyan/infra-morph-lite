@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.version import __version__
-from app.domain.cost import CostEstimate, CostStatus
+from app.domain.cost import CostEstimate, CostStatus, Pricing
 from app.domain.enums import Provider
 from app.domain.spec import InfrastructureSpecification
 from app.domain.terraform import CommandStatus
@@ -186,7 +186,7 @@ def print_cost(cost: CostEstimate, region: str) -> None:
 
     def money(amount: Decimal | None) -> str:
         if amount is None:
-            return "not priced"
+            return "no fixed monthly price"
         if cost.currency == "USD":
             return f"${amount:,.2f}/month"
         return f"{amount:,.2f} {cost.currency}/month"
@@ -195,15 +195,19 @@ def print_cost(cost: CostEstimate, region: str) -> None:
         f"Cost: {money(cost.monthly_total)} "
         f"(list prices, {region}; usage-based charges excluded)"
     )
-    # Most expensive first; resources without a price last.
+    # Most expensive first; then one line per kind of resource without a price.
     ranked = sorted(
-        cost.resources,
-        key=lambda r: (r.monthly_cost is None, -(r.monthly_cost or 0)),
+        (r for r in cost.resources if r.monthly_cost is not None),
+        key=lambda r: -r.monthly_cost,
     )
     for item in ranked[:MAX_COST_LINES]:
         print(f"  {item.address}: {money(item.monthly_cost)}")
     if len(ranked) > MAX_COST_LINES:
         print(f"  ... and {len(ranked) - MAX_COST_LINES} more")
+    for pricing in (Pricing.USAGE_BASED, Pricing.NO_CHARGE, Pricing.NOT_PRICED):
+        addresses = [r.address for r in cost.resources if r.pricing is pricing]
+        if addresses:
+            print(f"  {pricing.value}: {', '.join(addresses)}")
 
 
 def interpret(requirement: str, provider: Provider, generate: bool) -> int:

@@ -13,12 +13,22 @@ class CostStatus(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class Pricing(StrEnum):
+    """Shown to the user as is. Declared in display order."""
+
+    PRICED = "priced"
+    USAGE_BASED = "usage-based"
+    NO_CHARGE = "no charge"
+    NOT_PRICED = "not priced"
+
+
 class ResourceCost(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Terraform address; "<type> (<count>)" where Infracost reports only counts.
     address: str
-    # None = no price known. Never 0 as a stand-in.
+    pricing: Pricing
+    # None unless pricing is "priced". Never 0 as a stand-in.
     monthly_cost: Decimal | None
     note: str = ""
 

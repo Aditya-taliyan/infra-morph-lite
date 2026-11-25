@@ -1,12 +1,14 @@
+import json
 import threading
 from pathlib import Path
 
 import pytest
 
 from app.generators.terraform_generator import FILES
+from app.infrastructure.infracost_runner import InfracostRunner, parse_breakdown
 from app.main import app
 from tests.api_helpers import FakeRunner, make_client, spec_json
-from tests.helpers import resource
+from tests.helpers import FIXTURES, resource
 
 URL = "/api/v1/generate"
 
@@ -37,6 +39,17 @@ def test_generate_success(tmp_path: Path):
     assert body["cost"]["monthly_total"] is None
     assert [w["code"] for w in body["validation"]["warnings"]] == ["W01"]
     assert runner.calls == ["init", "fmt", "validate", "plan", "show"]
+
+
+def test_cost_wording_in_the_response(tmp_path: Path, monkeypatch):
+    sample = json.loads((FIXTURES / "infracost" / "breakdown.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(InfracostRunner, "estimate", lambda *_: parse_breakdown(sample))
+
+    body = make_client(FakeRunner(), tmp_path).post(URL, json=spec_json("demo2")).json()
+
+    pricing = {r["address"]: r["pricing"] for r in body["cost"]["resources"]}
+    assert pricing["aws_vpc.main"] == "no charge"
+    assert pricing["aws_example_thing.x"] == "not priced"
 
 
 def test_failed_terraform_step_is_still_200(tmp_path: Path):

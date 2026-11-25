@@ -226,7 +226,7 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/generate `
 - `status` is one of `passed`, `failed`, `timeout`, `skipped`. `skipped` means Terraform is not installed (`exit_code` is `null` and `stderr` says so).
 - `terraform_ok` is `false` when a step failed or timed out. **A failed Terraform step is still HTTP 200**: the request worked, but the infrastructure did not pass. Read `steps[-1].stderr`.
 - `plan_summary` is `null` unless `plan` and `show` both passed.
-- `cost` is always present. It runs after `validate` passed (AWS and Azure) and never fails the run. `status` is `available` or `unavailable`; `message` gives the reason. Amounts are decimal strings. `null` means no price is known, which is not the same as free. Each entry in `resources` is `{address, monthly_cost, note}`; types Infracost only counts appear as `"<type> (<count>)"`.
+- `cost` is always present. It runs after `validate` passed (AWS and Azure) and never fails the run. `status` is `available` or `unavailable`; `message` gives the reason. Amounts are decimal strings. Each entry in `resources` is `{address, pricing, monthly_cost, note}`, priced entries first. `pricing` is `priced`, `usage-based` (no fixed monthly price, e.g. an S3 bucket), `no charge` (the cloud provider does not charge for it) or `not priced` (Infracost does not support it or found no price). `monthly_cost` is `null` unless `pricing` is `priced`. Types Infracost only counts appear as `"<type> (<count>)"`.
 
 **Errors:**
 

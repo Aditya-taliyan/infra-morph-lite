@@ -25,15 +25,19 @@
           {
             "name": "aws_s3_bucket.assets",
             "resourceType": "aws_s3_bucket",
-            "monthlyCost": null,
             "subresources": [
               {
                 "name": "Standard",
-                "monthlyCost": null,
                 "costComponents": [{ "name": "Storage", "monthlyCost": null }]
               }
             ]
           }
+        ],
+        "freeResources": [
+          { "name": "aws_example_thing.x", "resourceType": "aws_example_thing" },
+          { "name": "aws_subnet.a", "resourceType": "aws_subnet" },
+          { "name": "aws_subnet.b", "resourceType": "aws_subnet" },
+          { "name": "aws_vpc.main", "resourceType": "aws_vpc" }
         ],
         "totalMonthlyCost": "8.392"
       }
@@ -41,11 +45,11 @@
   ],
   "totalMonthlyCost": "8.392",
   "summary": {
-    "totalDetectedResources": 6,
+    "totalDetectedResources": 8,
     "totalSupportedResources": 2,
-    "totalUnsupportedResources": 1,
-    "totalNoPriceResources": 3,
-    "unsupportedResourceCounts": { "aws_example_thing": 1 },
-    "noPriceResourceCounts": { "aws_subnet": 2, "aws_vpc": 1 }
+    "totalUnsupportedResources": 2,
+    "totalNoPriceResources": 4,
+    "unsupportedResourceCounts": { "aws_example_thing": 2 },
+    "noPriceResourceCounts": { "aws_route_table_association": 1, "aws_subnet": 2, "aws_vpc": 1 }
   }
 }

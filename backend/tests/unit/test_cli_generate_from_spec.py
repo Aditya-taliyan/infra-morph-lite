@@ -116,30 +116,56 @@ def test_provider_flag_must_match_spec(monkeypatch, capsys, fake_pipeline):
 
 
 def test_cost_is_printed_after_the_plan(monkeypatch, capsys, fake_pipeline):
-    costs = [None, "1", "30", "2.5", None, "4"]
+    costs = ["1", "30", "2.5", "4", "5", "6"]
+    unpriced = {
+        "net.x": "no charge",
+        "odd.x": "not priced",
+        "net.y": "no charge",
+        "bucket.x": "usage-based",
+    }
     fake_pipeline.cost_runner.result = CostEstimate(
         status=CostStatus.AVAILABLE,
         currency="USD",
         monthly_total="1037.5",
         resources=[
-            ResourceCost(address=f"res.r{i}", monthly_cost=c) for i, c in enumerate(costs)
-        ],
+            ResourceCost(address=f"res.r{i}", pricing="priced", monthly_cost=c)
+            for i, c in enumerate(costs)
+        ]
+        + [ResourceCost(address=a, pricing=p, monthly_cost=None) for a, p in unpriced.items()],
     )
 
     assert _run(monkeypatch, str(DEMO2)) == 0
 
     out = capsys.readouterr().out
     region = json.loads(DEMO2.read_text(encoding="utf-8"))["region"]
-    assert out.splitlines()[-8:] == [
+    assert out.splitlines()[-11:] == [
         "Plan: 11 to add, 0 to change, 0 to destroy.",
         f"Cost: $1,037.50/month (list prices, {region}; usage-based charges excluded)",
-        "  res.r2: $30.00/month",
-        "  res.r5: $4.00/month",
-        "  res.r3: $2.50/month",
-        "  res.r1: $1.00/month",
-        "  res.r0: not priced",
+        "  res.r1: $30.00/month",
+        "  res.r5: $6.00/month",
+        "  res.r4: $5.00/month",
+        "  res.r3: $4.00/month",
+        "  res.r2: $2.50/month",
         "  ... and 1 more",
+        "  usage-based: bucket.x",
+        "  no charge: net.x, net.y",
+        "  not priced: odd.x",
     ]
+
+
+def test_empty_cost_lines_are_left_out(monkeypatch, capsys, fake_pipeline):
+    fake_pipeline.cost_runner.result = CostEstimate(
+        status=CostStatus.AVAILABLE,
+        currency="USD",
+        resources=[ResourceCost(address="net.x", pricing="no charge", monthly_cost=None)],
+    )
+
+    assert _run(monkeypatch, str(DEMO2)) == 0
+
+    out = capsys.readouterr().out
+    assert "Cost: no fixed monthly price" in out
+    assert out.splitlines()[-1] == "  no charge: net.x"
+    assert "not priced" not in out
 
 
 def test_unavailable_cost_prints_the_reason_and_no_number(monkeypatch, capsys, fake_pipeline):
